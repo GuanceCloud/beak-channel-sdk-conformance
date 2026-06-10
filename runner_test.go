@@ -75,9 +75,16 @@ func (fakeConnector) PollLogin(context.Context, LoginPollRequest) (*LoginStatus,
 
 func (fakeConnector) ParseInbound(context.Context, InboundFixture) ([]InboundMessage, error) {
 	return []InboundMessage{{
-		Platform:    "fake",
-		ChatType:    ChatTypeGroup,
-		ChatID:      "chat-1",
+		Platform:        "fake",
+		ChatType:        ChatTypeGroup,
+		ChatID:          "chat-1",
+		ChatDisplayName: "Ops Room",
+		ChatIdentity: ChatIdentity{
+			ID:          "chat-1",
+			IDType:      "chat_id",
+			Type:        ChatTypeGroup,
+			DisplayName: "Ops Room",
+		},
 		SenderID:    "user-1",
 		MessageID:   "msg-1",
 		Text:        "",
@@ -137,6 +144,8 @@ func TestRun(t *testing.T) {
 			Name:    "follow up only at bot",
 			Fixture: InboundFixture{Name: "follow-up"},
 			Expect: InboundExpectation{
+				ChatDisplayName:  "Ops Room",
+				ChatIdentityID:   "chat-1",
 				TextTrimmedEmpty: &trueValue,
 				MentionedMe:      &trueValue,
 				MentionIDs:       []string{"bot-open-id"},

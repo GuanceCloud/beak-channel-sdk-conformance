@@ -169,6 +169,17 @@ func AssertInboundMessages(t *testing.T, platform string, got []InboundMessage, 
 	if expect.ChatID != "" && msg.ChatID != expect.ChatID {
 		t.Fatalf("inbound chat_id = %q, want %q", msg.ChatID, expect.ChatID)
 	}
+	if expect.ChatDisplayName != "" {
+		if got := firstString(msg.ChatIdentity.DisplayName, msg.ChatDisplayName); got != expect.ChatDisplayName {
+			t.Fatalf("inbound chat display name = %q, want %q", got, expect.ChatDisplayName)
+		}
+	}
+	if expect.ChatIdentityID != "" && msg.ChatIdentity.ID != expect.ChatIdentityID {
+		t.Fatalf("inbound chat_identity.id = %q, want %q", msg.ChatIdentity.ID, expect.ChatIdentityID)
+	}
+	if msg.ChatDisplayName != "" && msg.ChatIdentity.DisplayName != "" && msg.ChatDisplayName != msg.ChatIdentity.DisplayName {
+		t.Fatalf("inbound chat_display_name = %q but chat_identity.display_name = %q", msg.ChatDisplayName, msg.ChatIdentity.DisplayName)
+	}
 	if expect.SenderID != "" && msg.SenderID != expect.SenderID {
 		t.Fatalf("inbound sender_id = %q, want %q", msg.SenderID, expect.SenderID)
 	}
@@ -306,6 +317,15 @@ func stringValue(value any) string {
 	default:
 		return fmt.Sprint(typed)
 	}
+}
+
+func firstString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func containsMentionID(mentions []MentionIdentity, id string) bool {
