@@ -174,14 +174,25 @@ func AssertInboundMessages(t *testing.T, platform string, got []InboundMessage, 
 			t.Fatalf("inbound chat display name = %q, want %q", got, expect.ChatDisplayName)
 		}
 	}
+	if expect.ChatAvatarURL != "" {
+		if got := firstString(msg.ChatIdentity.AvatarURL, msg.ChatAvatarURL); got != expect.ChatAvatarURL {
+			t.Fatalf("inbound chat avatar url = %q, want %q", got, expect.ChatAvatarURL)
+		}
+	}
 	if expect.ChatIdentityID != "" && msg.ChatIdentity.ID != expect.ChatIdentityID {
 		t.Fatalf("inbound chat_identity.id = %q, want %q", msg.ChatIdentity.ID, expect.ChatIdentityID)
 	}
 	if msg.ChatDisplayName != "" && msg.ChatIdentity.DisplayName != "" && msg.ChatDisplayName != msg.ChatIdentity.DisplayName {
 		t.Fatalf("inbound chat_display_name = %q but chat_identity.display_name = %q", msg.ChatDisplayName, msg.ChatIdentity.DisplayName)
 	}
+	if msg.ChatAvatarURL != "" && msg.ChatIdentity.AvatarURL != "" && msg.ChatAvatarURL != msg.ChatIdentity.AvatarURL {
+		t.Fatalf("inbound chat_avatar_url = %q but chat_identity.avatar_url = %q", msg.ChatAvatarURL, msg.ChatIdentity.AvatarURL)
+	}
 	if expect.SenderID != "" && msg.SenderID != expect.SenderID {
 		t.Fatalf("inbound sender_id = %q, want %q", msg.SenderID, expect.SenderID)
+	}
+	if expect.SenderDisplayName != "" && msg.SenderDisplayName != expect.SenderDisplayName {
+		t.Fatalf("inbound sender_display_name = %q, want %q", msg.SenderDisplayName, expect.SenderDisplayName)
 	}
 	if expect.Text != "" && msg.Text != expect.Text {
 		t.Fatalf("inbound text = %q, want %q", msg.Text, expect.Text)

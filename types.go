@@ -202,20 +202,22 @@ type InboundCase struct {
 }
 
 type InboundExpectation struct {
-	MinMessages      int      `json:"min_messages,omitempty"`
-	MessageIndex     int      `json:"message_index,omitempty"`
-	ChatType         string   `json:"chat_type,omitempty"`
-	ChatID           string   `json:"chat_id,omitempty"`
-	ChatDisplayName  string   `json:"chat_display_name,omitempty"`
-	ChatIdentityID   string   `json:"chat_identity_id,omitempty"`
-	SenderID         string   `json:"sender_id,omitempty"`
-	Text             string   `json:"text,omitempty"`
-	TextTrimmedEmpty *bool    `json:"text_trimmed_empty,omitempty"`
-	MentionedMe      *bool    `json:"mentioned_me,omitempty"`
-	MentionAll       *bool    `json:"mention_all,omitempty"`
-	MentionIDs       []string `json:"mention_ids,omitempty"`
-	RequireMessageID bool     `json:"require_message_id,omitempty"`
-	RequireDedupeKey bool     `json:"require_dedupe_key,omitempty"`
+	MinMessages       int      `json:"min_messages,omitempty"`
+	MessageIndex      int      `json:"message_index,omitempty"`
+	ChatType          string   `json:"chat_type,omitempty"`
+	ChatID            string   `json:"chat_id,omitempty"`
+	ChatDisplayName   string   `json:"chat_display_name,omitempty"`
+	ChatAvatarURL     string   `json:"chat_avatar_url,omitempty"`
+	ChatIdentityID    string   `json:"chat_identity_id,omitempty"`
+	SenderID          string   `json:"sender_id,omitempty"`
+	SenderDisplayName string   `json:"sender_display_name,omitempty"`
+	Text              string   `json:"text,omitempty"`
+	TextTrimmedEmpty  *bool    `json:"text_trimmed_empty,omitempty"`
+	MentionedMe       *bool    `json:"mentioned_me,omitempty"`
+	MentionAll        *bool    `json:"mention_all,omitempty"`
+	MentionIDs        []string `json:"mention_ids,omitempty"`
+	RequireMessageID  bool     `json:"require_message_id,omitempty"`
+	RequireDedupeKey  bool     `json:"require_dedupe_key,omitempty"`
 }
 
 type Config struct {

@@ -65,6 +65,9 @@ regressions:
   credential/account credential.
 - inbound messages include standard `chat_type`, `chat_id`, `sender_id`, and
   `message_id` or `dedupe_key`.
+- inbound display fields use the shared contract: `chat_display_name`,
+  `chat_avatar_url`, `chat_identity.display_name`, `chat_identity.avatar_url`,
+  and `sender_display_name` must be consistent when a platform provides them.
 - `mention_all=true` is not treated as the only signal for `mentioned_me=true`.
 - follow-up messages that only mention the bot are not dropped and set
   `mentioned_me=true`.
