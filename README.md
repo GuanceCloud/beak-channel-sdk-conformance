@@ -71,6 +71,16 @@ regressions:
 - `mention_all=true` is not treated as the only signal for `mentioned_me=true`.
 - follow-up messages that only mention the bot are not dropped and set
   `mentioned_me=true`.
+- runtime health uses the standard account state keys:
+  `stream_connection_state`, `stream_connected_at`,
+  `stream_disconnected_at`, `stream_last_activity_at`,
+  `stream_last_ping_at`, `stream_last_pong_at`, `stream_last_event_at`,
+  `stream_last_error`, `stream_last_error_at`,
+  `stream_reconnect_requested_at`, `stream_reconnect_error`,
+  `stream_reconnect_error_at`, and `stream_session_expired`.
+- host-owned stream SDKs do not create their own main reconnect loop; SDK-owned
+  polling SDKs write `connected`, `reconnecting`, `reconnect_failed`, `stopped`,
+  or `expired` through the standard `stream_connection_state` key.
 
 ## Suggested Fixture Layout
 

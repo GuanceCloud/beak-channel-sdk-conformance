@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 func AssertMetadata(t *testing.T, platform string, got ConnectorMetadata) {
@@ -22,6 +23,20 @@ func AssertMetadata(t *testing.T, platform string, got ConnectorMetadata) {
 	}
 	if got.Capabilities.Stream && got.Capabilities.Webhook {
 		t.Fatal("metadata capabilities must not declare both stream and webhook")
+	}
+	if got.Capabilities.Stream {
+		switch strings.TrimSpace(got.Capabilities.RuntimeOwnership) {
+		case RuntimeOwnershipHostStream, RuntimeOwnershipSDKOwned:
+		default:
+			t.Fatalf("metadata.capabilities.runtime_ownership must be %q or %q for stream connectors, got %q", RuntimeOwnershipHostStream, RuntimeOwnershipSDKOwned, got.Capabilities.RuntimeOwnership)
+		}
+	}
+	for _, mode := range got.Capabilities.AckModes {
+		switch strings.TrimSpace(mode) {
+		case "reaction", "typing", "read":
+		default:
+			t.Fatalf("unsupported metadata.capabilities.ack_modes value %q", mode)
+		}
 	}
 }
 
@@ -222,6 +237,236 @@ func AssertInboundMessages(t *testing.T, platform string, got []InboundMessage, 
 	}
 }
 
+func AssertAckResult(t *testing.T, platform string, got *AckResult, err error, expect AckExpectation) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("Acknowledge returned error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("Acknowledge returned nil result")
+	}
+	if strings.TrimSpace(got.Platform) != "" && strings.TrimSpace(got.Platform) != platform {
+		t.Fatalf("ack platform = %q, want %q", got.Platform, platform)
+	}
+	if strings.TrimSpace(got.AccountUUID) == "" {
+		t.Fatal("ack account_uuid is required")
+	}
+	if strings.TrimSpace(got.Status) == "" {
+		t.Fatal("ack status is required")
+	}
+	if expect.Status != "" && got.Status != expect.Status {
+		t.Fatalf("ack status = %q, want %q; result=%+v", got.Status, expect.Status, got)
+	}
+	if expect.Mode != "" && got.Mode != expect.Mode {
+		t.Fatalf("ack mode = %q, want %q; result=%+v", got.Mode, expect.Mode, got)
+	}
+	if expect.ReactionID != "" && got.ReactionID != expect.ReactionID {
+		t.Fatalf("ack reaction_id = %q, want %q; result=%+v", got.ReactionID, expect.ReactionID, got)
+	}
+}
+
+func AssertStreamConnectResult(t *testing.T, got *StreamConnectResult, err error, expect HostStreamConnectExpectation) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("ConnectStream returned error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("ConnectStream returned nil result")
+	}
+	if strings.TrimSpace(got.URL) == "" {
+		t.Fatalf("ConnectStream url is required; result=%+v", got)
+	}
+	if expect.URLContains != "" && !strings.Contains(got.URL, expect.URLContains) {
+		t.Fatalf("ConnectStream url = %q, want substring %q", got.URL, expect.URLContains)
+	}
+	if expect.ReadMessageType != 0 && got.ReadMessageType != expect.ReadMessageType {
+		t.Fatalf("ConnectStream read_message_type = %d, want %d", got.ReadMessageType, expect.ReadMessageType)
+	}
+	if expect.RequireServiceID && strings.TrimSpace(got.ServiceID) == "" {
+		t.Fatalf("ConnectStream service_id is required; result=%+v", got)
+	}
+	if expect.RequirePingInterval && durationValue(got.PingInterval) <= 0 {
+		t.Fatalf("ConnectStream ping_interval must be positive; result=%+v", got)
+	}
+	if expect.RequirePongTimeout && durationValue(got.PongTimeout) <= 0 {
+		t.Fatalf("ConnectStream pong_timeout must be positive; result=%+v", got)
+	}
+	if expect.RequireState && got.State == nil {
+		t.Fatalf("ConnectStream state is required; result=%+v", got)
+	}
+	health := expect.RuntimeHealth
+	if expect.RequireConnectedHealth {
+		health.ConnectionState = RuntimeHealthStateConnected
+		health.RequireConnectedAt = true
+		health.RequireLastActivityAt = true
+	}
+	AssertRuntimeHealthState(t, got.HealthUpdates, health)
+}
+
+func AssertStreamPingFrame(t *testing.T, got *StreamFrame, err error, expect HostStreamPingExpectation) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("BuildStreamPing returned error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("BuildStreamPing returned nil frame")
+	}
+	if expect.MessageType != 0 && got.MessageType != expect.MessageType {
+		t.Fatalf("BuildStreamPing message_type = %d, want %d", got.MessageType, expect.MessageType)
+	}
+	if expect.RequireData && len(got.Data) == 0 {
+		t.Fatalf("BuildStreamPing data is required; frame=%+v", got)
+	}
+}
+
+func AssertStreamFrameResult(t *testing.T, got *StreamFrameResult, err error, expect HostStreamFrameExpectation) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("HandleStreamFrame returned error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("HandleStreamFrame returned nil result")
+	}
+	if len(got.ResponseFrames) < expect.MinResponseFrames {
+		t.Fatalf("HandleStreamFrame response frame count = %d, want at least %d; result=%+v", len(got.ResponseFrames), expect.MinResponseFrames, got)
+	}
+	if expect.ResponseMessageType != 0 {
+		for i, frame := range got.ResponseFrames {
+			if frame.MessageType != expect.ResponseMessageType {
+				t.Fatalf("HandleStreamFrame response frame[%d].message_type = %d, want %d; result=%+v", i, frame.MessageType, expect.ResponseMessageType, got)
+			}
+		}
+	}
+	if expect.CloseReason != "" && got.CloseReason != expect.CloseReason {
+		t.Fatalf("HandleStreamFrame close_reason = %q, want %q; result=%+v", got.CloseReason, expect.CloseReason, got)
+	}
+	AssertRuntimeHealthState(t, got.HealthUpdates, expect.RuntimeHealth)
+	if expect.RequireFrameState && got.State == nil {
+		t.Fatalf("HandleStreamFrame state is required; result=%+v", got)
+	}
+	if expect.RequireEventResult && got.EventResult == nil {
+		t.Fatalf("HandleStreamFrame event_result is required; result=%+v", got)
+	}
+	if expect.EventType != "" {
+		if got.EventResult == nil {
+			t.Fatalf("HandleStreamFrame event_result is nil, want type %q; result=%+v", expect.EventType, got)
+		}
+		if got.EventResult.Type != expect.EventType {
+			t.Fatalf("HandleStreamFrame event_result.type = %q, want %q; result=%+v", got.EventResult.Type, expect.EventType, got)
+		}
+	}
+	if expect.EventIgnored != nil {
+		if got.EventResult == nil {
+			t.Fatalf("HandleStreamFrame event_result is nil, want ignored=%v; result=%+v", *expect.EventIgnored, got)
+		}
+		if got.EventResult.Ignored != *expect.EventIgnored {
+			t.Fatalf("HandleStreamFrame event_result.ignored = %v, want %v; result=%+v", got.EventResult.Ignored, *expect.EventIgnored, got)
+		}
+	}
+}
+
+func AssertRuntimeHealthState(t *testing.T, state map[string]any, expect RuntimeHealthExpectation) {
+	t.Helper()
+	if state == nil {
+		if emptyRuntimeHealthExpectation(expect) {
+			return
+		}
+		t.Fatal("runtime health state is nil")
+	}
+	if expect.ConnectionState != "" {
+		got := strings.TrimSpace(stringValue(state[RuntimeHealthKeyStreamConnectionState]))
+		if got != expect.ConnectionState {
+			t.Fatalf("%s = %q, want %q; state=%+v", RuntimeHealthKeyStreamConnectionState, got, expect.ConnectionState, state)
+		}
+	}
+	requireTimeKey := func(key string) {
+		t.Helper()
+		if timeValue(state[key]).IsZero() {
+			t.Fatalf("%s must be set; state=%+v", key, state)
+		}
+	}
+	if expect.RequireConnectedAt {
+		requireTimeKey(RuntimeHealthKeyStreamConnectedAt)
+	}
+	if expect.RequireDisconnectedAt {
+		requireTimeKey(RuntimeHealthKeyStreamDisconnectedAt)
+	}
+	if expect.RequireLastActivityAt {
+		requireTimeKey(RuntimeHealthKeyStreamLastActivityAt)
+	}
+	if expect.RequireLastPingAt {
+		requireTimeKey(RuntimeHealthKeyStreamLastPingAt)
+	}
+	if expect.RequireLastPongAt {
+		requireTimeKey(RuntimeHealthKeyStreamLastPongAt)
+	}
+	if expect.RequireLastEventAt {
+		requireTimeKey(RuntimeHealthKeyStreamLastEventAt)
+	}
+	if expect.RequireLastError {
+		if strings.TrimSpace(stringValue(state[RuntimeHealthKeyStreamLastError])) == "" {
+			t.Fatalf("%s must be set; state=%+v", RuntimeHealthKeyStreamLastError, state)
+		}
+	}
+	if expect.RequireLastErrorAt {
+		requireTimeKey(RuntimeHealthKeyStreamLastErrorAt)
+	}
+	if expect.RequireReconnectRequestedAt {
+		requireTimeKey(RuntimeHealthKeyStreamReconnectRequestedAt)
+	}
+	if expect.RequireReconnectError {
+		if strings.TrimSpace(stringValue(state[RuntimeHealthKeyStreamReconnectError])) == "" {
+			t.Fatalf("%s must be set; state=%+v", RuntimeHealthKeyStreamReconnectError, state)
+		}
+	}
+	if expect.RequireReconnectErrorAt {
+		requireTimeKey(RuntimeHealthKeyStreamReconnectErrorAt)
+	}
+	if expect.SessionExpired != nil {
+		got := boolValue(state[RuntimeHealthKeyStreamSessionExpired])
+		if got != *expect.SessionExpired {
+			t.Fatalf("%s = %v, want %v; state=%+v", RuntimeHealthKeyStreamSessionExpired, got, *expect.SessionExpired, state)
+		}
+	}
+}
+
+func emptyRuntimeHealthExpectation(expect RuntimeHealthExpectation) bool {
+	return expect.ConnectionState == "" &&
+		!expect.RequireConnectedAt &&
+		!expect.RequireDisconnectedAt &&
+		!expect.RequireLastActivityAt &&
+		!expect.RequireLastPingAt &&
+		!expect.RequireLastPongAt &&
+		!expect.RequireLastEventAt &&
+		!expect.RequireLastError &&
+		!expect.RequireLastErrorAt &&
+		!expect.RequireReconnectRequestedAt &&
+		!expect.RequireReconnectError &&
+		!expect.RequireReconnectErrorAt &&
+		expect.SessionExpired == nil
+}
+
+func durationValue(value any) time.Duration {
+	switch typed := value.(type) {
+	case time.Duration:
+		return typed
+	case int:
+		return time.Duration(typed)
+	case int64:
+		return time.Duration(typed)
+	case float64:
+		return time.Duration(typed)
+	case string:
+		if typed == "" {
+			return 0
+		}
+		if d, err := time.ParseDuration(typed); err == nil {
+			return d
+		}
+	}
+	return 0
+}
+
 func assertAccountID(t *testing.T, label, accountKey string, credential map[string]any) {
 	t.Helper()
 	accountID := strings.TrimSpace(stringValue(credential["account_id"]))
@@ -327,6 +572,35 @@ func stringValue(value any) string {
 		return ""
 	default:
 		return fmt.Sprint(typed)
+	}
+}
+
+func timeValue(value any) time.Time {
+	switch typed := value.(type) {
+	case time.Time:
+		return typed
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return time.Time{}
+		}
+		parsed, _ := time.Parse(time.RFC3339Nano, typed)
+		return parsed
+	case fmt.Stringer:
+		parsed, _ := time.Parse(time.RFC3339Nano, strings.TrimSpace(typed.String()))
+		return parsed
+	default:
+		return time.Time{}
+	}
+}
+
+func boolValue(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
 	}
 }
 

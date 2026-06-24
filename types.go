@@ -12,6 +12,13 @@ const (
 	LoginModeQRCode     = "qr_code"
 	LoginModeCredential = "credential"
 
+	RuntimeOwnershipHostStream = "host_stream"
+	RuntimeOwnershipSDKOwned   = "sdk_owned"
+
+	StreamMessageTypeText   = 1
+	StreamMessageTypeBinary = 2
+	StreamMessageTypePing   = 9
+
 	LoginStatusApproved = "approved"
 	LoginStatusExpired  = "expired"
 	LoginStatusFailed   = "failed"
@@ -38,6 +45,16 @@ type InboundParser interface {
 	ParseInbound(ctx context.Context, fixture InboundFixture) ([]InboundMessage, error)
 }
 
+type Acknowledger interface {
+	Acknowledge(ctx context.Context, req OutboundAck) (*AckResult, error)
+}
+
+type HostStreamer interface {
+	ConnectStream(ctx context.Context, req HostStreamConnectRequest) (*StreamConnectResult, error)
+	BuildStreamPing(ctx context.Context, req StreamPingRequest) (*StreamFrame, error)
+	HandleStreamFrame(ctx context.Context, req StreamFrameRequest) (*StreamFrameResult, error)
+}
+
 type ConnectorMetadata struct {
 	ID           string       `json:"id"`
 	Platform     string       `json:"platform"`
@@ -47,14 +64,16 @@ type ConnectorMetadata struct {
 }
 
 type Capabilities struct {
-	LoginModes     []string `json:"login_modes"`
-	Text           bool     `json:"text"`
-	Media          bool     `json:"media"`
-	GroupChat      bool     `json:"group_chat"`
-	DirectChat     bool     `json:"direct_chat"`
-	Stream         bool     `json:"stream"`
-	Webhook        bool     `json:"webhook"`
-	BlockStreaming bool     `json:"block_streaming"`
+	LoginModes       []string `json:"login_modes"`
+	Text             bool     `json:"text"`
+	Media            bool     `json:"media"`
+	GroupChat        bool     `json:"group_chat"`
+	DirectChat       bool     `json:"direct_chat"`
+	Stream           bool     `json:"stream"`
+	Webhook          bool     `json:"webhook"`
+	BlockStreaming   bool     `json:"block_streaming"`
+	AckModes         []string `json:"ack_modes,omitempty"`
+	RuntimeOwnership string   `json:"runtime_ownership,omitempty"`
 }
 
 type CredentialSchema struct {
@@ -152,6 +171,32 @@ type InboundMessage struct {
 	Raw               map[string]any    `json:"raw,omitempty"`
 }
 
+type OutboundAck struct {
+	WorkspaceUUID     string         `json:"workspace_uuid"`
+	Platform          string         `json:"platform"`
+	AccountUUID       string         `json:"account_uuid"`
+	ChannelUUID       string         `json:"channel_uuid"`
+	SessionUUID       string         `json:"session_uuid"`
+	SourceMessageUUID string         `json:"source_message_uuid,omitempty"`
+	ChatType          string         `json:"chat_type"`
+	ChatID            string         `json:"chat_id"`
+	TargetMessageID   string         `json:"target_message_id,omitempty"`
+	Intent            string         `json:"intent,omitempty"`
+	Action            string         `json:"action,omitempty"`
+	Mode              string         `json:"mode,omitempty"`
+	Emoji             string         `json:"emoji,omitempty"`
+	Raw               map[string]any `json:"raw,omitempty"`
+}
+
+type AckResult struct {
+	Platform    string         `json:"platform"`
+	AccountUUID string         `json:"account_uuid"`
+	Mode        string         `json:"mode,omitempty"`
+	Status      string         `json:"status"`
+	ReactionID  string         `json:"reaction_id,omitempty"`
+	Raw         map[string]any `json:"raw,omitempty"`
+}
+
 type MentionIdentity struct {
 	ID          string `json:"id"`
 	IDType      string `json:"id_type,omitempty"`
@@ -220,6 +265,137 @@ type InboundExpectation struct {
 	RequireDedupeKey  bool     `json:"require_dedupe_key,omitempty"`
 }
 
+type AckCase struct {
+	Name    string         `json:"name,omitempty"`
+	Request OutboundAck    `json:"request"`
+	Expect  AckExpectation `json:"expect"`
+}
+
+type AckExpectation struct {
+	Status     string `json:"status,omitempty"`
+	Mode       string `json:"mode,omitempty"`
+	ReactionID string `json:"reaction_id,omitempty"`
+}
+
+type RuntimeHealthExpectation struct {
+	ConnectionState             string `json:"connection_state,omitempty"`
+	RequireConnectedAt          bool   `json:"require_connected_at,omitempty"`
+	RequireDisconnectedAt       bool   `json:"require_disconnected_at,omitempty"`
+	RequireLastActivityAt       bool   `json:"require_last_activity_at,omitempty"`
+	RequireLastPingAt           bool   `json:"require_last_ping_at,omitempty"`
+	RequireLastPongAt           bool   `json:"require_last_pong_at,omitempty"`
+	RequireLastEventAt          bool   `json:"require_last_event_at,omitempty"`
+	RequireLastError            bool   `json:"require_last_error,omitempty"`
+	RequireLastErrorAt          bool   `json:"require_last_error_at,omitempty"`
+	RequireReconnectRequestedAt bool   `json:"require_reconnect_requested_at,omitempty"`
+	RequireReconnectError       bool   `json:"require_reconnect_error,omitempty"`
+	RequireReconnectErrorAt     bool   `json:"require_reconnect_error_at,omitempty"`
+	SessionExpired              *bool  `json:"session_expired,omitempty"`
+}
+
+type HostStreamConnectRequest struct {
+	WorkspaceUUID string         `json:"workspace_uuid,omitempty"`
+	ChannelUUID   string         `json:"channel_uuid,omitempty"`
+	Account       ChannelAccount `json:"account,omitempty"`
+	Credential    map[string]any `json:"credential,omitempty"`
+	State         map[string]any `json:"state,omitempty"`
+}
+
+type StreamConnectResult struct {
+	URL             string            `json:"url,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	ServiceID       string            `json:"service_id,omitempty"`
+	ReadMessageType int               `json:"read_message_type,omitempty"`
+	PingInterval    any               `json:"ping_interval,omitempty"`
+	PongTimeout     any               `json:"pong_timeout,omitempty"`
+	State           any               `json:"state,omitempty"`
+	HealthUpdates   map[string]any    `json:"health_updates,omitempty"`
+}
+
+type StreamPingRequest struct {
+	ServiceID string `json:"service_id,omitempty"`
+	State     any    `json:"state,omitempty"`
+}
+
+type StreamFrameRequest struct {
+	WorkspaceUUID string         `json:"workspace_uuid,omitempty"`
+	ChannelUUID   string         `json:"channel_uuid,omitempty"`
+	Account       ChannelAccount `json:"account,omitempty"`
+	Credential    map[string]any `json:"credential,omitempty"`
+	MessageType   int            `json:"message_type,omitempty"`
+	Data          []byte         `json:"data,omitempty"`
+	ServiceID     string         `json:"service_id,omitempty"`
+	State         any            `json:"state,omitempty"`
+}
+
+type StreamFrame struct {
+	MessageType int    `json:"message_type,omitempty"`
+	Data        []byte `json:"data,omitempty"`
+}
+
+type StreamFrameResult struct {
+	ResponseFrames []StreamFrame      `json:"response_frames,omitempty"`
+	HealthUpdates  map[string]any     `json:"health_updates,omitempty"`
+	EventResult    *StreamEventResult `json:"event_result,omitempty"`
+	CloseReason    string             `json:"close_reason,omitempty"`
+	State          any                `json:"state,omitempty"`
+}
+
+type StreamEventResult struct {
+	Type        string          `json:"type"`
+	Ignored     bool            `json:"ignored,omitempty"`
+	Reason      string          `json:"reason,omitempty"`
+	SessionUUID string          `json:"session_uuid,omitempty"`
+	MessageUUID string          `json:"message_uuid,omitempty"`
+	Inbound     *InboundMessage `json:"inbound,omitempty"`
+}
+
+type HostStreamCase struct {
+	Name    string                       `json:"name,omitempty"`
+	Request HostStreamConnectRequest     `json:"request,omitempty"`
+	Expect  HostStreamConnectExpectation `json:"expect,omitempty"`
+	Ping    *HostStreamPingCase          `json:"ping,omitempty"`
+	Frames  []HostStreamFrameCase        `json:"frames,omitempty"`
+}
+
+type HostStreamConnectExpectation struct {
+	URLContains            string                   `json:"url_contains,omitempty"`
+	ReadMessageType        int                      `json:"read_message_type,omitempty"`
+	RequireServiceID       bool                     `json:"require_service_id,omitempty"`
+	RequirePingInterval    bool                     `json:"require_ping_interval,omitempty"`
+	RequirePongTimeout     bool                     `json:"require_pong_timeout,omitempty"`
+	RequireState           bool                     `json:"require_state,omitempty"`
+	RequireConnectedHealth bool                     `json:"require_connected_health,omitempty"`
+	RuntimeHealth          RuntimeHealthExpectation `json:"runtime_health,omitempty"`
+}
+
+type HostStreamPingCase struct {
+	Request StreamPingRequest         `json:"request,omitempty"`
+	Expect  HostStreamPingExpectation `json:"expect,omitempty"`
+}
+
+type HostStreamPingExpectation struct {
+	MessageType int  `json:"message_type,omitempty"`
+	RequireData bool `json:"require_data,omitempty"`
+}
+
+type HostStreamFrameCase struct {
+	Name    string                     `json:"name,omitempty"`
+	Request StreamFrameRequest         `json:"request"`
+	Expect  HostStreamFrameExpectation `json:"expect,omitempty"`
+}
+
+type HostStreamFrameExpectation struct {
+	MinResponseFrames   int                      `json:"min_response_frames,omitempty"`
+	ResponseMessageType int                      `json:"response_message_type,omitempty"`
+	CloseReason         string                   `json:"close_reason,omitempty"`
+	RuntimeHealth       RuntimeHealthExpectation `json:"runtime_health,omitempty"`
+	EventType           string                   `json:"event_type,omitempty"`
+	EventIgnored        *bool                    `json:"event_ignored,omitempty"`
+	RequireEventResult  bool                     `json:"require_event_result,omitempty"`
+	RequireFrameState   bool                     `json:"require_frame_state,omitempty"`
+}
+
 type Config struct {
 	Platform string
 
@@ -228,8 +404,12 @@ type Config struct {
 	CredentialValidator      CredentialValidator
 	LoginPoller              LoginPoller
 	InboundParser            InboundParser
+	Acknowledger             Acknowledger
+	HostStreamer             HostStreamer
 
 	CredentialCases []CredentialValidationCase
 	LoginPollCases  []LoginPollCase
 	InboundCases    []InboundCase
+	AckCases        []AckCase
+	HostStreamCases []HostStreamCase
 }

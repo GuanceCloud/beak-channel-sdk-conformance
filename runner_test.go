@@ -96,6 +96,16 @@ func (fakeConnector) ParseInbound(context.Context, InboundFixture) ([]InboundMes
 	}}, nil
 }
 
+func (fakeConnector) Acknowledge(context.Context, OutboundAck) (*AckResult, error) {
+	return &AckResult{
+		Platform:    "fake",
+		AccountUUID: "stable-account",
+		Mode:        "reaction",
+		Status:      "sent",
+		ReactionID:  "reaction-1",
+	}, nil
+}
+
 func TestRun(t *testing.T) {
 	connector := fakeConnector{}
 	trueValue := true
@@ -106,6 +116,7 @@ func TestRun(t *testing.T) {
 		CredentialValidator:      connector,
 		LoginPoller:              connector,
 		InboundParser:            connector,
+		Acknowledger:             connector,
 		CredentialCases: []CredentialValidationCase{{
 			Name: "valid credential",
 			Request: CredentialValidationRequest{
@@ -155,6 +166,21 @@ func TestRun(t *testing.T) {
 				MentionedMe:       &trueValue,
 				MentionIDs:        []string{"bot-open-id"},
 				RequireMessageID:  true,
+			},
+		}},
+		AckCases: []AckCase{{
+			Name: "processing acknowledgement",
+			Request: OutboundAck{
+				AccountUUID:     "stable-account",
+				ChatType:        ChatTypeGroup,
+				ChatID:          "chat-1",
+				TargetMessageID: "msg-1",
+				Action:          "start",
+			},
+			Expect: AckExpectation{
+				Status:     "sent",
+				Mode:       "reaction",
+				ReactionID: "reaction-1",
 			},
 		}},
 	})
