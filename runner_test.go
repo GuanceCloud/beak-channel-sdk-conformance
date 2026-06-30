@@ -185,3 +185,59 @@ func TestRun(t *testing.T) {
 		}},
 	})
 }
+
+type splitPlatformConnector struct{}
+
+func (splitPlatformConnector) Metadata() ConnectorMetadata {
+	return ConnectorMetadata{
+		ID:       "split",
+		Platform: "sdk-platform",
+		Label:    "Split",
+		Capabilities: Capabilities{
+			LoginModes: []string{LoginModeCredential},
+			Text:       true,
+			GroupChat:  true,
+			Webhook:    true,
+		},
+	}
+}
+
+func (splitPlatformConnector) ParseInbound(context.Context, InboundFixture) ([]InboundMessage, error) {
+	return []InboundMessage{{
+		Platform:  "runtime-platform",
+		ChatType:  ChatTypeGroup,
+		ChatID:    "chat-1",
+		SenderID:  "user-1",
+		MessageID: "message-1",
+		Text:      "hello",
+	}}, nil
+}
+
+func (splitPlatformConnector) Acknowledge(context.Context, OutboundAck) (*AckResult, error) {
+	return &AckResult{
+		Platform:    "runtime-platform",
+		AccountUUID: "account-1",
+		Status:      "sent",
+	}, nil
+}
+
+func TestRunSupportsMetadataPlatformSeparateFromRuntimePlatform(t *testing.T) {
+	connector := splitPlatformConnector{}
+	Run(t, Config{
+		Platform:         "runtime-platform",
+		MetadataPlatform: "sdk-platform",
+		MetadataProvider: connector,
+		InboundParser:    connector,
+		Acknowledger:     connector,
+		InboundCases: []InboundCase{{
+			Name:    "runtime inbound platform",
+			Fixture: InboundFixture{},
+			Expect:  InboundExpectation{ChatID: "chat-1", SenderID: "user-1", Text: "hello", RequireMessageID: true},
+		}},
+		AckCases: []AckCase{{
+			Name:    "runtime ack platform",
+			Request: OutboundAck{AccountUUID: "account-1", ChatType: ChatTypeGroup, ChatID: "chat-1"},
+			Expect:  AckExpectation{Status: "sent"},
+		}},
+	})
+}

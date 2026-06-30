@@ -86,6 +86,11 @@ func AssertCredentialValidationResult(t *testing.T, req CredentialValidationRequ
 	if expect.DisplayName != "" && got.DisplayName != expect.DisplayName {
 		t.Fatalf("display_name = %q, want %q", got.DisplayName, expect.DisplayName)
 	}
+	if expect.MetadataPlatform != "" {
+		if gotPlatform := strings.TrimSpace(stringValue(got.Metadata["platform"])); gotPlatform != expect.MetadataPlatform {
+			t.Fatalf("metadata.platform = %q, want %q; metadata=%+v", gotPlatform, expect.MetadataPlatform, got.Metadata)
+		}
+	}
 	if expect.RequireAccountID {
 		assertAccountID(t, "credential result", accountKey, got.Credential)
 	}
@@ -160,7 +165,7 @@ func AssertInboundMessages(t *testing.T, platform string, got []InboundMessage, 
 		t.Fatalf("message_index %d out of range for %d messages", index, len(got))
 	}
 	msg := got[index]
-	if strings.TrimSpace(msg.Platform) != "" && strings.TrimSpace(msg.Platform) != platform {
+	if gotPlatform := strings.TrimSpace(msg.Platform); gotPlatform != platform {
 		t.Fatalf("inbound platform = %q, want %q", msg.Platform, platform)
 	}
 	if strings.TrimSpace(msg.ChatType) == "" {
@@ -245,7 +250,7 @@ func AssertAckResult(t *testing.T, platform string, got *AckResult, err error, e
 	if got == nil {
 		t.Fatal("Acknowledge returned nil result")
 	}
-	if strings.TrimSpace(got.Platform) != "" && strings.TrimSpace(got.Platform) != platform {
+	if gotPlatform := strings.TrimSpace(got.Platform); gotPlatform != platform {
 		t.Fatalf("ack platform = %q, want %q", got.Platform, platform)
 	}
 	if strings.TrimSpace(got.AccountUUID) == "" {
@@ -319,7 +324,7 @@ func AssertStreamPingFrame(t *testing.T, got *StreamFrame, err error, expect Hos
 	}
 }
 
-func AssertStreamFrameResult(t *testing.T, got *StreamFrameResult, err error, expect HostStreamFrameExpectation) {
+func AssertStreamFrameResult(t *testing.T, platform string, got *StreamFrameResult, err error, expect HostStreamFrameExpectation) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("HandleStreamFrame returned error: %v", err)
@@ -361,6 +366,11 @@ func AssertStreamFrameResult(t *testing.T, got *StreamFrameResult, err error, ex
 		}
 		if got.EventResult.Ignored != *expect.EventIgnored {
 			t.Fatalf("HandleStreamFrame event_result.ignored = %v, want %v; result=%+v", got.EventResult.Ignored, *expect.EventIgnored, got)
+		}
+	}
+	if got.EventResult != nil && got.EventResult.Inbound != nil {
+		if gotPlatform := strings.TrimSpace(got.EventResult.Inbound.Platform); gotPlatform != platform {
+			t.Fatalf("HandleStreamFrame event_result.inbound.platform = %q, want %q", gotPlatform, platform)
 		}
 	}
 }

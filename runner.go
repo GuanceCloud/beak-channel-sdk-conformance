@@ -12,12 +12,13 @@ func Run(t *testing.T, cfg Config) {
 	if cfg.Platform == "" {
 		t.Fatal("Platform is required")
 	}
+	metadataPlatform := firstString(cfg.MetadataPlatform, cfg.Platform)
 
 	var metadata ConnectorMetadata
 	if cfg.MetadataProvider != nil {
 		metadata = cfg.MetadataProvider.Metadata()
 		t.Run("metadata", func(t *testing.T) {
-			AssertMetadata(t, cfg.Platform, metadata)
+			AssertMetadata(t, metadataPlatform, metadata)
 		})
 	}
 
@@ -69,7 +70,7 @@ func Run(t *testing.T, cfg Config) {
 							}
 							fillHostStreamFrameDefaults(&frameReq, req, cfg.Platform)
 							result, err := cfg.HostStreamer.HandleStreamFrame(ctx, frameReq)
-							AssertStreamFrameResult(t, result, err, frameCase.Expect)
+							AssertStreamFrameResult(t, cfg.Platform, result, err, frameCase.Expect)
 							if result != nil {
 								state = result.State
 							}

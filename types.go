@@ -221,6 +221,7 @@ type CredentialValidationExpectation struct {
 	Valid              bool     `json:"valid"`
 	AccountKey         string   `json:"account_key,omitempty"`
 	DisplayName        string   `json:"display_name,omitempty"`
+	MetadataPlatform   string   `json:"metadata_platform,omitempty"`
 	RequireAccountID   bool     `json:"require_account_id,omitempty"`
 	RequireBotIdentity bool     `json:"require_bot_identity,omitempty"`
 	VolatileKeys       []string `json:"volatile_keys,omitempty"`
@@ -397,7 +398,13 @@ type HostStreamFrameExpectation struct {
 }
 
 type Config struct {
+	// Platform is the runtime channel/account platform expected in Beak-facing
+	// messages and acknowledgements.
 	Platform string
+	// MetadataPlatform is the SDK connector identity reported by Metadata().
+	// It defaults to Platform. Set it when one connector package supports
+	// multiple runtime brands, for example lark metadata with feishu runtime.
+	MetadataPlatform string
 
 	MetadataProvider         MetadataProvider
 	CredentialSchemaProvider CredentialSchemaProvider

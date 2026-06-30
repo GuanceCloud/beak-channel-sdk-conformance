@@ -43,6 +43,22 @@ func TestBeakSDKConformance(t *testing.T) {
 }
 ```
 
+`Platform` is the runtime channel/account platform expected in Beak-facing
+messages, acks, and stream frames. `MetadataPlatform` is the SDK package identity
+reported by `Metadata()`, and defaults to `Platform`. Set both when one SDK
+package serves multiple runtime brands:
+
+```go
+conformance.Run(t, conformance.Config{
+    Platform:         "feishu",
+    MetadataPlatform: "lark",
+    MetadataProvider: adapter,
+    InboundParser:    adapter,
+    Acknowledger:     adapter,
+    HostStreamer:     adapter,
+})
+```
+
 The adapter should only convert types. It must not add business logic that the
 real SDK connector does not have.
 
@@ -107,12 +123,13 @@ Example `credential_cases.json`:
         "client_secret": "secret"
       }
     },
-    "expect": {
-      "valid": true,
-      "account_key": "stable-account",
-      "require_account_id": true,
-      "require_bot_identity": true
-    }
+  "expect": {
+    "valid": true,
+    "account_key": "stable-account",
+    "metadata_platform": "feishu",
+    "require_account_id": true,
+    "require_bot_identity": true
+  }
   }
 ]
 ```
@@ -127,3 +144,9 @@ Connector modules should keep `beak-channel-sdk-conformance` in a separate test 
 not add this helper as a normal dependency of a publishable connector module,
 otherwise downstream Beak integrations may inherit a test-only module
 requirement.
+
+Runtime-facing outputs must always set `platform` to `Config.Platform`.
+Conformance fails inbound messages, acknowledgements, and host-stream inbound
+event results that omit it or return a different value. For credential
+validation, set `expect.metadata_platform` when the SDK should expose the
+runtime platform in `CredentialValidationResult.Metadata["platform"]`.
