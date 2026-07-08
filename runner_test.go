@@ -92,8 +92,15 @@ func (fakeConnector) ParseInbound(context.Context, InboundFixture) ([]InboundMes
 		SenderDisplayName: "Alice",
 		MessageID:         "msg-1",
 		Text:              "",
-		MentionedMe:       true,
-		Mentions:          []MentionIdentity{{ID: "bot-open-id", IDType: "open_id"}},
+		ReferencedMessage: &ReferencedMessage{
+			MessageID:   "quoted-1",
+			ThreadID:    "thread-1",
+			SenderID:    "user-2",
+			MessageType: "text",
+			Text:        "quoted text",
+		},
+		MentionedMe: true,
+		Mentions:    []MentionIdentity{{ID: "bot-open-id", IDType: "open_id"}},
 	}}, nil
 }
 
@@ -167,7 +174,14 @@ func TestRun(t *testing.T) {
 				TextTrimmedEmpty:  &trueValue,
 				MentionedMe:       &trueValue,
 				MentionIDs:        []string{"bot-open-id"},
-				RequireMessageID:  true,
+				ReferencedMessage: &ReferencedMessageExpectation{
+					MessageID:   "quoted-1",
+					ThreadID:    "thread-1",
+					SenderID:    "user-2",
+					MessageType: "text",
+					Text:        "quoted text",
+				},
+				RequireMessageID: true,
 			},
 		}},
 		AckCases: []AckCase{{

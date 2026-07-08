@@ -234,6 +234,9 @@ func AssertInboundMessages(t *testing.T, platform string, got []InboundMessage, 
 			t.Fatalf("inbound mentions missing id %q: %+v", id, msg.Mentions)
 		}
 	}
+	if expect.ReferencedMessage != nil {
+		assertReferencedMessage(t, msg.ReferencedMessage, *expect.ReferencedMessage)
+	}
 	if expect.RequireMessageID && strings.TrimSpace(msg.MessageID) == "" {
 		t.Fatal("inbound message_id is required by expectation")
 	}
@@ -242,6 +245,49 @@ func AssertInboundMessages(t *testing.T, platform string, got []InboundMessage, 
 	}
 	if msg.MentionAll && msg.MentionedMe && len(msg.Mentions) == 0 {
 		t.Fatal("mention_all must not be the only signal used to set mentioned_me")
+	}
+}
+
+func assertReferencedMessage(t *testing.T, got *ReferencedMessage, expect ReferencedMessageExpectation) {
+	t.Helper()
+	if got == nil {
+		t.Fatal("inbound referenced_message is required by expectation")
+	}
+	if expect.Platform != "" && got.Platform != expect.Platform {
+		t.Fatalf("referenced_message.platform = %q, want %q", got.Platform, expect.Platform)
+	}
+	if expect.MessageID != "" && got.MessageID != expect.MessageID {
+		t.Fatalf("referenced_message.message_id = %q, want %q", got.MessageID, expect.MessageID)
+	}
+	if expect.ChatType != "" && got.ChatType != expect.ChatType {
+		t.Fatalf("referenced_message.chat_type = %q, want %q", got.ChatType, expect.ChatType)
+	}
+	if expect.ChatID != "" && got.ChatID != expect.ChatID {
+		t.Fatalf("referenced_message.chat_id = %q, want %q", got.ChatID, expect.ChatID)
+	}
+	if expect.ThreadID != "" && got.ThreadID != expect.ThreadID {
+		t.Fatalf("referenced_message.thread_id = %q, want %q", got.ThreadID, expect.ThreadID)
+	}
+	if expect.RootID != "" && got.RootID != expect.RootID {
+		t.Fatalf("referenced_message.root_id = %q, want %q", got.RootID, expect.RootID)
+	}
+	if expect.SenderID != "" && got.SenderID != expect.SenderID {
+		t.Fatalf("referenced_message.sender_id = %q, want %q", got.SenderID, expect.SenderID)
+	}
+	if expect.SenderDisplayName != "" && got.SenderDisplayName != expect.SenderDisplayName {
+		t.Fatalf("referenced_message.sender_display_name = %q, want %q", got.SenderDisplayName, expect.SenderDisplayName)
+	}
+	if expect.MessageType != "" && got.MessageType != expect.MessageType {
+		t.Fatalf("referenced_message.message_type = %q, want %q", got.MessageType, expect.MessageType)
+	}
+	if expect.Text != "" && got.Text != expect.Text {
+		t.Fatalf("referenced_message.text = %q, want %q", got.Text, expect.Text)
+	}
+	if expect.CreatedAt != "" && got.CreatedAt != expect.CreatedAt {
+		t.Fatalf("referenced_message.created_at = %q, want %q", got.CreatedAt, expect.CreatedAt)
+	}
+	if expect.RequireText && strings.TrimSpace(got.Text) == "" {
+		t.Fatal("referenced_message.text is required by expectation")
 	}
 }
 
