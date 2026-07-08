@@ -252,6 +252,7 @@ type InboundExpectation struct {
 	MessageIndex      int      `json:"message_index,omitempty"`
 	ChatType          string   `json:"chat_type,omitempty"`
 	ChatID            string   `json:"chat_id,omitempty"`
+	ThreadID          string   `json:"thread_id,omitempty"`
 	ChatDisplayName   string   `json:"chat_display_name,omitempty"`
 	ChatAvatarURL     string   `json:"chat_avatar_url,omitempty"`
 	ChatIdentityID    string   `json:"chat_identity_id,omitempty"`

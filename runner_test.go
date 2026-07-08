@@ -78,6 +78,7 @@ func (fakeConnector) ParseInbound(context.Context, InboundFixture) ([]InboundMes
 		Platform:        "fake",
 		ChatType:        ChatTypeGroup,
 		ChatID:          "chat-1",
+		ThreadID:        "thread-1",
 		ChatDisplayName: "Ops Room",
 		ChatAvatarURL:   "https://example.test/ops.png",
 		ChatIdentity: ChatIdentity{
@@ -161,6 +162,7 @@ func TestRun(t *testing.T) {
 				ChatDisplayName:   "Ops Room",
 				ChatAvatarURL:     "https://example.test/ops.png",
 				ChatIdentityID:    "chat-1",
+				ThreadID:          "thread-1",
 				SenderDisplayName: "Alice",
 				TextTrimmedEmpty:  &trueValue,
 				MentionedMe:       &trueValue,

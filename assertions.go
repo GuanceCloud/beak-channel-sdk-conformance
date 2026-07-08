@@ -189,6 +189,9 @@ func AssertInboundMessages(t *testing.T, platform string, got []InboundMessage, 
 	if expect.ChatID != "" && msg.ChatID != expect.ChatID {
 		t.Fatalf("inbound chat_id = %q, want %q", msg.ChatID, expect.ChatID)
 	}
+	if expect.ThreadID != "" && msg.ThreadID != expect.ThreadID {
+		t.Fatalf("inbound thread_id = %q, want %q", msg.ThreadID, expect.ThreadID)
+	}
 	if expect.ChatDisplayName != "" {
 		if got := firstString(msg.ChatIdentity.DisplayName, msg.ChatDisplayName); got != expect.ChatDisplayName {
 			t.Fatalf("inbound chat display name = %q, want %q", got, expect.ChatDisplayName)
