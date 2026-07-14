@@ -1,11 +1,36 @@
 package conformance
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 )
+
+func AssertWebhookError(t *testing.T, err error, wantStatus int, wantCode string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("webhook error = nil")
+	}
+	var statusErr HTTPStatusError
+	if !errors.As(err, &statusErr) {
+		t.Fatalf("webhook error %T does not implement HTTPStatusCode()", err)
+	}
+	if got := statusErr.HTTPStatusCode(); got != wantStatus {
+		t.Fatalf("webhook status = %d, want %d; error=%v", got, wantStatus, err)
+	}
+	if strings.TrimSpace(wantCode) == "" {
+		return
+	}
+	var codeErr ErrorCodeError
+	if !errors.As(err, &codeErr) {
+		t.Fatalf("webhook error %T does not implement ErrorCode()", err)
+	}
+	if got := strings.TrimSpace(codeErr.ErrorCode()); got != wantCode {
+		t.Fatalf("webhook error code = %q, want %q; error=%v", got, wantCode, err)
+	}
+}
 
 func AssertMetadata(t *testing.T, platform string, got ConnectorMetadata) {
 	t.Helper()

@@ -87,6 +87,9 @@ regressions:
 - `mention_all=true` is not treated as the only signal for `mentioned_me=true`.
 - follow-up messages that only mention the bot are not dropped and set
   `mentioned_me=true`.
+- webhook failures expose HTTP status and stable error codes through the
+  structural `HTTPStatusError` and `ErrorCodeError` contracts. Use
+  `AssertWebhookError` instead of matching `Error()` text.
 - runtime health uses the standard account state keys:
   `stream_connection_state`, `stream_connected_at`,
   `stream_disconnected_at`, `stream_last_activity_at`,

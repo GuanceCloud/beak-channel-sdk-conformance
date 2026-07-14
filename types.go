@@ -55,6 +55,20 @@ type HostStreamer interface {
 	HandleStreamFrame(ctx context.Context, req StreamFrameRequest) (*StreamFrameResult, error)
 }
 
+// HTTPStatusError is the structural contract used by connector SDKs to map a
+// webhook failure to an HTTP response without coupling the host to an SDK type.
+type HTTPStatusError interface {
+	error
+	HTTPStatusCode() int
+}
+
+// ErrorCodeError optionally exposes a stable machine-readable webhook error
+// code. Error() remains diagnostic text and must not be parsed by the host.
+type ErrorCodeError interface {
+	error
+	ErrorCode() string
+}
+
 type ConnectorMetadata struct {
 	ID           string       `json:"id"`
 	Platform     string       `json:"platform"`
