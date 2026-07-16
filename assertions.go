@@ -85,6 +85,12 @@ func AssertCredentialSchema(t *testing.T, got CredentialSchema) {
 
 func AssertCredentialValidationResult(t *testing.T, req CredentialValidationRequest, got *CredentialValidationResult, err error, expect CredentialValidationExpectation) {
 	t.Helper()
+	if expect.RequireGoError {
+		if err == nil {
+			t.Fatalf("ValidateCredential returned result %+v, want a Go error", got)
+		}
+		return
+	}
 	if err != nil {
 		t.Fatalf("ValidateCredential returned error: %v", err)
 	}
@@ -177,6 +183,12 @@ func AssertInboundMessages(t *testing.T, platform string, got []InboundMessage, 
 	t.Helper()
 	if err != nil {
 		t.Fatalf("ParseInbound returned error: %v", err)
+	}
+	if expect.ExpectNoMessages {
+		if len(got) != 0 {
+			t.Fatalf("ParseInbound returned %d messages, want none: %+v", len(got), got)
+		}
+		return
 	}
 	minMessages := expect.MinMessages
 	if minMessages == 0 {

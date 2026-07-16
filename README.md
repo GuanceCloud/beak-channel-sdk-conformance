@@ -72,6 +72,9 @@ The first conformance gate focuses on problems that have caused Beak integration
 regressions:
 
 - `ValidateCredential` returns a stable `account_key`.
+- definitive invalid credentials return `valid=false`, while transient network,
+  rate-limit, and platform-server failures remain Go errors. Fixture cases can
+  set `expect.require_go_error=true` for this boundary.
 - normalized `credential.account_id` matches `account_key` when required.
 - volatile values such as access tokens, QR challenges, webhook URLs, event IDs,
   message IDs, cursors, offsets, and expiring tokens are not used as account keys.
@@ -87,6 +90,9 @@ regressions:
 - `mention_all=true` is not treated as the only signal for `mentioned_me=true`.
 - follow-up messages that only mention the bot are not dropped and set
   `mentioned_me=true`.
+- platform events that cannot be represented by the common Beak message
+  contract are explicitly ignored. Fixture cases can set
+  `expect.expect_no_messages=true` to prove they do not create an agent turn.
 - webhook failures expose HTTP status and stable error codes through the
   structural `HTTPStatusError` and `ErrorCodeError` contracts. Use
   `AssertWebhookError` instead of matching `Error()` text.

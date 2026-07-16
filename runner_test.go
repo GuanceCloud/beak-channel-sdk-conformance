@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -34,6 +35,9 @@ func (fakeConnector) CredentialSchema(context.Context) CredentialSchema {
 }
 
 func (fakeConnector) ValidateCredential(_ context.Context, req CredentialValidationRequest) (*CredentialValidationResult, error) {
+	if req.Credential["secret"] == "timeout" {
+		return nil, errors.New("temporary credential validation timeout")
+	}
 	if req.Credential["secret"] == "bad" {
 		return &CredentialValidationResult{
 			Valid:      false,
@@ -73,7 +77,10 @@ func (fakeConnector) PollLogin(context.Context, LoginPollRequest) (*LoginStatus,
 	}, nil
 }
 
-func (fakeConnector) ParseInbound(context.Context, InboundFixture) ([]InboundMessage, error) {
+func (fakeConnector) ParseInbound(_ context.Context, fixture InboundFixture) ([]InboundMessage, error) {
+	if fixture.Name == "ignored" {
+		return nil, nil
+	}
 	return []InboundMessage{{
 		Platform:        "fake",
 		ChatType:        ChatTypeGroup,
@@ -150,6 +157,15 @@ func TestRun(t *testing.T) {
 				},
 			},
 			Expect: CredentialValidationExpectation{Valid: false},
+		}, {
+			Name: "transient credential validation failure",
+			Request: CredentialValidationRequest{
+				Credential: map[string]any{
+					"account_id": "stable-account",
+					"secret":     "timeout",
+				},
+			},
+			Expect: CredentialValidationExpectation{RequireGoError: true},
 		}},
 		LoginPollCases: []LoginPollCase{{
 			Name:    "approved login",
@@ -183,6 +199,10 @@ func TestRun(t *testing.T) {
 				},
 				RequireMessageID: true,
 			},
+		}, {
+			Name:    "unsupported event is explicitly ignored",
+			Fixture: InboundFixture{Name: "ignored"},
+			Expect:  InboundExpectation{ExpectNoMessages: true},
 		}},
 		AckCases: []AckCase{{
 			Name: "processing acknowledgement",

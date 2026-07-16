@@ -249,6 +249,7 @@ type CredentialValidationCase struct {
 
 type CredentialValidationExpectation struct {
 	Valid              bool     `json:"valid"`
+	RequireGoError     bool     `json:"require_go_error,omitempty"`
 	AccountKey         string   `json:"account_key,omitempty"`
 	DisplayName        string   `json:"display_name,omitempty"`
 	MetadataPlatform   string   `json:"metadata_platform,omitempty"`
@@ -278,6 +279,7 @@ type InboundCase struct {
 }
 
 type InboundExpectation struct {
+	ExpectNoMessages  bool                          `json:"expect_no_messages,omitempty"`
 	MinMessages       int                           `json:"min_messages,omitempty"`
 	MessageIndex      int                           `json:"message_index,omitempty"`
 	ChatType          string                        `json:"chat_type,omitempty"`
