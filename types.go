@@ -15,6 +15,9 @@ const (
 	RuntimeOwnershipHostStream = "host_stream"
 	RuntimeOwnershipSDKOwned   = "sdk_owned"
 
+	WebhookRegistrationManual    = "manual"
+	WebhookRegistrationAutomatic = "automatic"
+
 	StreamMessageTypeText   = 1
 	StreamMessageTypeBinary = 2
 	StreamMessageTypePing   = 9
@@ -78,16 +81,17 @@ type ConnectorMetadata struct {
 }
 
 type Capabilities struct {
-	LoginModes       []string `json:"login_modes"`
-	Text             bool     `json:"text"`
-	Media            bool     `json:"media"`
-	GroupChat        bool     `json:"group_chat"`
-	DirectChat       bool     `json:"direct_chat"`
-	Stream           bool     `json:"stream"`
-	Webhook          bool     `json:"webhook"`
-	BlockStreaming   bool     `json:"block_streaming"`
-	AckModes         []string `json:"ack_modes,omitempty"`
-	RuntimeOwnership string   `json:"runtime_ownership,omitempty"`
+	LoginModes          []string `json:"login_modes"`
+	Text                bool     `json:"text"`
+	Media               bool     `json:"media"`
+	GroupChat           bool     `json:"group_chat"`
+	DirectChat          bool     `json:"direct_chat"`
+	Stream              bool     `json:"stream"`
+	Webhook             bool     `json:"webhook"`
+	WebhookRegistration string   `json:"webhook_registration,omitempty"`
+	BlockStreaming      bool     `json:"block_streaming"`
+	AckModes            []string `json:"ack_modes,omitempty"`
+	RuntimeOwnership    string   `json:"runtime_ownership,omitempty"`
 }
 
 type CredentialSchema struct {
@@ -248,14 +252,15 @@ type CredentialValidationCase struct {
 }
 
 type CredentialValidationExpectation struct {
-	Valid              bool     `json:"valid"`
-	RequireGoError     bool     `json:"require_go_error,omitempty"`
-	AccountKey         string   `json:"account_key,omitempty"`
-	DisplayName        string   `json:"display_name,omitempty"`
-	MetadataPlatform   string   `json:"metadata_platform,omitempty"`
-	RequireAccountID   bool     `json:"require_account_id,omitempty"`
-	RequireBotIdentity bool     `json:"require_bot_identity,omitempty"`
-	VolatileKeys       []string `json:"volatile_keys,omitempty"`
+	Valid                  bool     `json:"valid"`
+	RequireGoError         bool     `json:"require_go_error,omitempty"`
+	AccountKey             string   `json:"account_key,omitempty"`
+	DisplayName            string   `json:"display_name,omitempty"`
+	MetadataPlatform       string   `json:"metadata_platform,omitempty"`
+	RequireAccountID       bool     `json:"require_account_id,omitempty"`
+	RequireBotIdentity     bool     `json:"require_bot_identity,omitempty"`
+	RequiredCredentialKeys []string `json:"required_credential_keys,omitempty"`
+	VolatileKeys           []string `json:"volatile_keys,omitempty"`
 }
 
 type LoginPollCase struct {

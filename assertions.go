@@ -56,6 +56,16 @@ func AssertMetadata(t *testing.T, platform string, got ConnectorMetadata) {
 			t.Fatalf("metadata.capabilities.runtime_ownership must be %q or %q for stream connectors, got %q", RuntimeOwnershipHostStream, RuntimeOwnershipSDKOwned, got.Capabilities.RuntimeOwnership)
 		}
 	}
+	webhookRegistration := strings.TrimSpace(got.Capabilities.WebhookRegistration)
+	if got.Capabilities.Webhook {
+		switch webhookRegistration {
+		case WebhookRegistrationManual, WebhookRegistrationAutomatic:
+		default:
+			t.Fatalf("metadata.capabilities.webhook_registration must be %q or %q for webhook connectors, got %q", WebhookRegistrationManual, WebhookRegistrationAutomatic, webhookRegistration)
+		}
+	} else if webhookRegistration != "" {
+		t.Fatalf("metadata.capabilities.webhook_registration requires webhook=true, got %q", webhookRegistration)
+	}
 	for _, mode := range got.Capabilities.AckModes {
 		switch strings.TrimSpace(mode) {
 		case "reaction", "typing", "read":
@@ -128,6 +138,15 @@ func AssertCredentialValidationResult(t *testing.T, req CredentialValidationRequ
 	if expect.RequireBotIdentity {
 		if !hasBotIdentity(got.State) {
 			t.Fatalf("credential result state must include bot_identity or bot_identities: %+v", got.State)
+		}
+	}
+	for _, key := range expect.RequiredCredentialKeys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if strings.TrimSpace(stringValue(got.Credential[key])) == "" {
+			t.Fatalf("credential result must include non-empty %q: %+v", key, got.Credential)
 		}
 	}
 

@@ -14,10 +14,11 @@ func (fakeConnector) Metadata() ConnectorMetadata {
 		Platform: "fake",
 		Label:    "Fake",
 		Capabilities: Capabilities{
-			LoginModes: []string{LoginModeCredential, LoginModeQRCode},
-			Text:       true,
-			GroupChat:  true,
-			Webhook:    true,
+			LoginModes:          []string{LoginModeCredential, LoginModeQRCode},
+			Text:                true,
+			GroupChat:           true,
+			Webhook:             true,
+			WebhookRegistration: WebhookRegistrationManual,
 		},
 	}
 }
@@ -142,11 +143,12 @@ func TestRun(t *testing.T) {
 				},
 			},
 			Expect: CredentialValidationExpectation{
-				Valid:              true,
-				AccountKey:         "stable-account",
-				DisplayName:        "Stable Bot",
-				RequireAccountID:   true,
-				RequireBotIdentity: true,
+				Valid:                  true,
+				AccountKey:             "stable-account",
+				DisplayName:            "Stable Bot",
+				RequireAccountID:       true,
+				RequireBotIdentity:     true,
+				RequiredCredentialKeys: []string{"account_id"},
 			},
 		}, {
 			Name: "invalid credential",
@@ -230,10 +232,11 @@ func (splitPlatformConnector) Metadata() ConnectorMetadata {
 		Platform: "sdk-platform",
 		Label:    "Split",
 		Capabilities: Capabilities{
-			LoginModes: []string{LoginModeCredential},
-			Text:       true,
-			GroupChat:  true,
-			Webhook:    true,
+			LoginModes:          []string{LoginModeCredential},
+			Text:                true,
+			GroupChat:           true,
+			Webhook:             true,
+			WebhookRegistration: WebhookRegistrationManual,
 		},
 	}
 }

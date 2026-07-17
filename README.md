@@ -72,10 +72,16 @@ The first conformance gate focuses on problems that have caused Beak integration
 regressions:
 
 - `ValidateCredential` returns a stable `account_key`.
+- webhook connectors declare `capabilities.webhook_registration=manual` when
+  an operator must configure the callback, or `automatic` when `Start`
+  registers the host-injected endpoint through the platform API.
 - definitive invalid credentials return `valid=false`, while transient network,
   rate-limit, and platform-server failures remain Go errors. Fixture cases can
   set `expect.require_go_error=true` for this boundary.
 - normalized `credential.account_id` matches `account_key` when required.
+- SDK-generated backend credentials can be required with
+  `expect.required_credential_keys`; each listed key must be returned non-empty
+  from `ValidateCredential` so the host can persist it.
 - volatile values such as access tokens, QR challenges, webhook URLs, event IDs,
   message IDs, cursors, offsets, and expiring tokens are not used as account keys.
 - valid credential and approved QR/OAuth login results expose standard
