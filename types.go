@@ -361,6 +361,8 @@ type StreamConnectResult struct {
 	Headers         map[string]string `json:"headers,omitempty"`
 	ServiceID       string            `json:"service_id,omitempty"`
 	ReadMessageType int               `json:"read_message_type,omitempty"`
+	InitialFrames   []StreamFrame     `json:"initial_frames,omitempty"`
+	WaitForReady    bool              `json:"wait_for_ready,omitempty"`
 	PingInterval    any               `json:"ping_interval,omitempty"`
 	PongTimeout     any               `json:"pong_timeout,omitempty"`
 	State           any               `json:"state,omitempty"`
@@ -390,6 +392,9 @@ type StreamFrame struct {
 
 type StreamFrameResult struct {
 	ResponseFrames []StreamFrame      `json:"response_frames,omitempty"`
+	ResponseTo     string             `json:"response_to,omitempty"`
+	Ready          bool               `json:"ready,omitempty"`
+	Terminal       bool               `json:"terminal,omitempty"`
 	HealthUpdates  map[string]any     `json:"health_updates,omitempty"`
 	EventResult    *StreamEventResult `json:"event_result,omitempty"`
 	CloseReason    string             `json:"close_reason,omitempty"`
@@ -421,6 +426,8 @@ type HostStreamConnectExpectation struct {
 	RequirePongTimeout     bool                     `json:"require_pong_timeout,omitempty"`
 	RequireState           bool                     `json:"require_state,omitempty"`
 	RequireConnectedHealth bool                     `json:"require_connected_health,omitempty"`
+	MinInitialFrames       int                      `json:"min_initial_frames,omitempty"`
+	WaitForReady           *bool                    `json:"wait_for_ready,omitempty"`
 	RuntimeHealth          RuntimeHealthExpectation `json:"runtime_health,omitempty"`
 }
 
@@ -449,6 +456,9 @@ type HostStreamFrameExpectation struct {
 	EventIgnored        *bool                    `json:"event_ignored,omitempty"`
 	RequireEventResult  bool                     `json:"require_event_result,omitempty"`
 	RequireFrameState   bool                     `json:"require_frame_state,omitempty"`
+	ResponseTo          string                   `json:"response_to,omitempty"`
+	Ready               *bool                    `json:"ready,omitempty"`
+	Terminal            *bool                    `json:"terminal,omitempty"`
 }
 
 type Config struct {

@@ -404,6 +404,17 @@ func AssertStreamConnectResult(t *testing.T, got *StreamConnectResult, err error
 	if expect.RequireState && got.State == nil {
 		t.Fatalf("ConnectStream state is required; result=%+v", got)
 	}
+	if len(got.InitialFrames) < expect.MinInitialFrames {
+		t.Fatalf("ConnectStream initial frame count = %d, want at least %d; result=%+v", len(got.InitialFrames), expect.MinInitialFrames, got)
+	}
+	for i, frame := range got.InitialFrames {
+		if frame.MessageType == 0 || len(frame.Data) == 0 {
+			t.Fatalf("ConnectStream initial frame[%d] must include message type and data; result=%+v", i, got)
+		}
+	}
+	if expect.WaitForReady != nil && got.WaitForReady != *expect.WaitForReady {
+		t.Fatalf("ConnectStream wait_for_ready = %v, want %v; result=%+v", got.WaitForReady, *expect.WaitForReady, got)
+	}
 	health := expect.RuntimeHealth
 	if expect.RequireConnectedHealth {
 		health.ConnectionState = RuntimeHealthStateConnected
@@ -453,6 +464,15 @@ func AssertStreamFrameResult(t *testing.T, platform string, got *StreamFrameResu
 	AssertRuntimeHealthState(t, got.HealthUpdates, expect.RuntimeHealth)
 	if expect.RequireFrameState && got.State == nil {
 		t.Fatalf("HandleStreamFrame state is required; result=%+v", got)
+	}
+	if expect.ResponseTo != "" && got.ResponseTo != expect.ResponseTo {
+		t.Fatalf("HandleStreamFrame response_to = %q, want %q; result=%+v", got.ResponseTo, expect.ResponseTo, got)
+	}
+	if expect.Ready != nil && got.Ready != *expect.Ready {
+		t.Fatalf("HandleStreamFrame ready = %v, want %v; result=%+v", got.Ready, *expect.Ready, got)
+	}
+	if expect.Terminal != nil && got.Terminal != *expect.Terminal {
+		t.Fatalf("HandleStreamFrame terminal = %v, want %v; result=%+v", got.Terminal, *expect.Terminal, got)
 	}
 	if expect.RequireEventResult && got.EventResult == nil {
 		t.Fatalf("HandleStreamFrame event_result is required; result=%+v", got)
