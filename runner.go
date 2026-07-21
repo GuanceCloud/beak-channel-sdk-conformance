@@ -2,25 +2,23 @@ package conformance
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 )
 
 func Run(t *testing.T, cfg Config) {
 	t.Helper()
 	ctx := context.Background()
-
-	if cfg.Platform == "" {
-		t.Fatal("Platform is required")
+	metadata, err := validateConfig(cfg)
+	if err != nil {
+		t.Fatal(err)
 	}
 	metadataPlatform := firstString(cfg.MetadataPlatform, cfg.Platform)
 
-	var metadata ConnectorMetadata
-	if cfg.MetadataProvider != nil {
-		metadata = cfg.MetadataProvider.Metadata()
-		t.Run("metadata", func(t *testing.T) {
-			AssertMetadata(t, metadataPlatform, metadata)
-		})
-	}
+	t.Run("metadata", func(t *testing.T) {
+		AssertMetadata(t, metadataPlatform, metadata)
+	})
 
 	if metadata.Capabilities.RuntimeOwnership == RuntimeOwnershipHostStream {
 		t.Run("host_stream_contract", func(t *testing.T) {
@@ -76,6 +74,18 @@ func Run(t *testing.T, cfg Config) {
 							}
 						})
 					}
+				})
+			}
+		})
+	}
+
+	if metadata.Capabilities.RuntimeOwnership == RuntimeOwnershipSDKOwned {
+		t.Run("sdk_owned_runtime_contract", func(t *testing.T) {
+			for _, tc := range cfg.SDKOwnedRuntimeCases {
+				tc := tc
+				t.Run(caseName(tc.Name, tc.Scenario), func(t *testing.T) {
+					state, err := tc.Run(ctx)
+					AssertSDKOwnedRuntimeResult(t, state, err, tc)
 				})
 			}
 		})
@@ -150,6 +160,75 @@ func Run(t *testing.T, cfg Config) {
 			})
 		}
 	}
+
+	if len(cfg.SendCases) > 0 {
+		for _, tc := range cfg.SendCases {
+			tc := tc
+			t.Run(caseName(tc.Name, "send"), func(t *testing.T) {
+				steps := tc.Steps
+				if len(steps) == 0 {
+					steps = []SendStep{{Request: tc.Request, Expect: tc.Expect}}
+				}
+				for index, step := range steps {
+					step := step
+					t.Run(caseName(step.Name, fmt.Sprintf("step_%d", index+1)), func(t *testing.T) {
+						req := step.Request
+						if req.Platform == "" {
+							req.Platform = cfg.Platform
+						}
+						got, err := cfg.Sender.Send(ctx, req)
+						AssertSendResult(t, cfg.Platform, req, got, err, step.Expect)
+					})
+				}
+			})
+		}
+	}
+}
+
+func validateConfig(cfg Config) (ConnectorMetadata, error) {
+	if strings.TrimSpace(cfg.Platform) == "" {
+		return ConnectorMetadata{}, fmt.Errorf("Platform is required")
+	}
+	if cfg.MetadataProvider == nil {
+		return ConnectorMetadata{}, fmt.Errorf("MetadataProvider is required")
+	}
+	metadata := cfg.MetadataProvider.Metadata()
+	if cfg.Sender == nil {
+		return ConnectorMetadata{}, fmt.Errorf("connectors must expose a Sender adapter")
+	}
+	if len(cfg.SendCases) == 0 {
+		return ConnectorMetadata{}, fmt.Errorf("connectors must define SendCases")
+	}
+	switch metadata.Capabilities.RuntimeOwnership {
+	case RuntimeOwnershipHostStream:
+		if cfg.HostStreamer == nil {
+			return ConnectorMetadata{}, fmt.Errorf("host_stream connectors must expose a HostStreamConnector adapter")
+		}
+		if len(cfg.HostStreamCases) == 0 {
+			return ConnectorMetadata{}, fmt.Errorf("host_stream connectors must define HostStreamCases")
+		}
+	case RuntimeOwnershipSDKOwned:
+		required := map[string]bool{
+			SDKOwnedRuntimeScenarioPollRecovery:   false,
+			SDKOwnedRuntimeScenarioSessionExpired: false,
+		}
+		for index, tc := range cfg.SDKOwnedRuntimeCases {
+			if tc.Run == nil {
+				return ConnectorMetadata{}, fmt.Errorf("SDKOwnedRuntimeCases[%d].Run is required", index)
+			}
+			if _, ok := required[tc.Scenario]; !ok {
+				return ConnectorMetadata{}, fmt.Errorf("unsupported SDK-owned runtime scenario %q", tc.Scenario)
+			}
+			required[tc.Scenario] = true
+		}
+		for _, scenario := range []string{SDKOwnedRuntimeScenarioPollRecovery, SDKOwnedRuntimeScenarioSessionExpired} {
+			present := required[scenario]
+			if !present {
+				return ConnectorMetadata{}, fmt.Errorf("sdk_owned connectors must define runtime scenario %q", scenario)
+			}
+		}
+	}
+	return metadata, nil
 }
 
 func caseName(name, fallback string) string {

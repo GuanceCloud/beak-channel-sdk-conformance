@@ -3,6 +3,7 @@ package conformance
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -122,6 +123,13 @@ func (fakeConnector) Acknowledge(context.Context, OutboundAck) (*AckResult, erro
 	}, nil
 }
 
+func (fakeConnector) Send(_ context.Context, req OutboundMessage) (*SendResult, error) {
+	if req.Text == "fail" {
+		return nil, errors.New("expected send failure")
+	}
+	return &SendResult{Platform: "fake", AccountUUID: req.AccountUUID, MessageID: "sent-1", Raw: map[string]any{"delivery_method": "fake"}}, nil
+}
+
 func TestRun(t *testing.T) {
 	connector := fakeConnector{}
 	trueValue := true
@@ -132,6 +140,7 @@ func TestRun(t *testing.T) {
 		CredentialValidator:      connector,
 		LoginPoller:              connector,
 		InboundParser:            connector,
+		Sender:                   connector,
 		Acknowledger:             connector,
 		CredentialCases: []CredentialValidationCase{{
 			Name: "valid credential",
@@ -206,6 +215,20 @@ func TestRun(t *testing.T) {
 			Fixture: InboundFixture{Name: "ignored"},
 			Expect:  InboundExpectation{ExpectNoMessages: true},
 		}},
+		SendCases: []SendCase{{
+			Name: "outbound sequence",
+			Steps: []SendStep{{
+				Name: "success",
+				Request: OutboundMessage{
+					AccountUUID: "stable-account", ChatType: ChatTypeGroup, ChatID: "chat-1", MessageUUID: "outbound-1", Text: "hello", Format: "markdown",
+				},
+				Expect: SendExpectation{MessageID: "sent-1", RequireMessageID: true, RequiredRawKeys: []string{"delivery_method"}},
+			}, {
+				Name:    "expected failure",
+				Request: OutboundMessage{AccountUUID: "stable-account", ChatType: ChatTypeGroup, ChatID: "chat-1", Text: "fail"},
+				Expect:  SendExpectation{RequireError: true, ErrorContains: "expected send failure"},
+			}},
+		}},
 		AckCases: []AckCase{{
 			Name: "processing acknowledgement",
 			Request: OutboundAck{
@@ -222,6 +245,35 @@ func TestRun(t *testing.T) {
 			},
 		}},
 	})
+}
+
+type sdkOwnedConnector struct{ fakeConnector }
+
+func (sdkOwnedConnector) Metadata() ConnectorMetadata {
+	metadata := fakeConnector{}.Metadata()
+	metadata.Capabilities.RuntimeOwnership = RuntimeOwnershipSDKOwned
+	return metadata
+}
+
+func TestValidateConfigRequiresCommonContracts(t *testing.T) {
+	validSendCases := []SendCase{{Request: OutboundMessage{Text: "hello"}}}
+	if _, err := validateConfig(Config{Platform: "fake"}); err == nil || !strings.Contains(err.Error(), "MetadataProvider") {
+		t.Fatalf("missing metadata error=%v", err)
+	}
+	connector := sdkOwnedConnector{}
+	if _, err := validateConfig(Config{Platform: "fake", MetadataProvider: connector, Sender: connector, SendCases: validSendCases}); err == nil || !strings.Contains(err.Error(), SDKOwnedRuntimeScenarioPollRecovery) {
+		t.Fatalf("missing sdk-owned runtime error=%v", err)
+	}
+	cases := []SDKOwnedRuntimeCase{{
+		Scenario: SDKOwnedRuntimeScenarioPollRecovery,
+		Run:      func(context.Context) (map[string]any, error) { return map[string]any{}, nil },
+	}, {
+		Scenario: SDKOwnedRuntimeScenarioSessionExpired,
+		Run:      func(context.Context) (map[string]any, error) { return map[string]any{}, errors.New("expired") },
+	}}
+	if _, err := validateConfig(Config{Platform: "fake", MetadataProvider: connector, Sender: connector, SendCases: validSendCases, SDKOwnedRuntimeCases: cases}); err != nil {
+		t.Fatalf("valid sdk-owned config error=%v", err)
+	}
 }
 
 type splitPlatformConnector struct{}
@@ -260,6 +312,10 @@ func (splitPlatformConnector) Acknowledge(context.Context, OutboundAck) (*AckRes
 	}, nil
 }
 
+func (splitPlatformConnector) Send(_ context.Context, req OutboundMessage) (*SendResult, error) {
+	return &SendResult{Platform: "runtime-platform", AccountUUID: req.AccountUUID, MessageID: "message-2"}, nil
+}
+
 func TestRunSupportsMetadataPlatformSeparateFromRuntimePlatform(t *testing.T) {
 	connector := splitPlatformConnector{}
 	Run(t, Config{
@@ -267,11 +323,17 @@ func TestRunSupportsMetadataPlatformSeparateFromRuntimePlatform(t *testing.T) {
 		MetadataPlatform: "sdk-platform",
 		MetadataProvider: connector,
 		InboundParser:    connector,
+		Sender:           connector,
 		Acknowledger:     connector,
 		InboundCases: []InboundCase{{
 			Name:    "runtime inbound platform",
 			Fixture: InboundFixture{},
 			Expect:  InboundExpectation{ChatID: "chat-1", SenderID: "user-1", Text: "hello", RequireMessageID: true},
+		}},
+		SendCases: []SendCase{{
+			Name:    "runtime send platform",
+			Request: OutboundMessage{AccountUUID: "account-1", ChatType: ChatTypeGroup, ChatID: "chat-1", Text: "hello"},
+			Expect:  SendExpectation{RequireMessageID: true},
 		}},
 		AckCases: []AckCase{{
 			Name:    "runtime ack platform",

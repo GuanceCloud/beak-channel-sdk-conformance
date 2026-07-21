@@ -27,6 +27,7 @@ func TestBeakSDKConformance(t *testing.T) {
         CredentialValidator:      adapter,
         LoginPoller:              adapter,
         InboundParser:            adapter,
+        Sender:                   adapter,
         CredentialCases: conformance.MustLoadJSON[[]conformance.CredentialValidationCase](
             t,
             "testdata/beak-conformance/credential_cases.json",
@@ -39,6 +40,18 @@ func TestBeakSDKConformance(t *testing.T) {
             t,
             "testdata/beak-conformance/inbound_cases.json",
         ),
+        SendCases: []conformance.SendCase{{
+            Name: "text outbound",
+            Request: conformance.OutboundMessage{
+                AccountUUID: "account-1",
+                MessageUUID: "message-1",
+                ChatType: "group",
+                ChatID: "chat-1",
+                Text: "hello",
+                Format: "text",
+            },
+            Expect: conformance.SendExpectation{RequireMessageID: true},
+        }},
     })
 }
 ```
@@ -55,12 +68,57 @@ conformance.Run(t, conformance.Config{
     MetadataProvider: adapter,
     InboundParser:    adapter,
     Acknowledger:     adapter,
+    Sender:           adapter,
     HostStreamer:     adapter,
+    SendCases: []conformance.SendCase{{
+        Request: conformance.OutboundMessage{
+            AccountUUID: "account-feishu",
+            MessageUUID: "message-feishu",
+            ChatType: "group",
+            ChatID: "oc_group",
+            Text: "hello",
+        },
+        Expect: conformance.SendExpectation{RequireMessageID: true},
+    }},
 })
 ```
 
 The adapter should only convert types. It must not add business logic that the
 real SDK connector does not have.
+
+`MetadataProvider`, `Sender`, and at least one `SendCase` are mandatory. A
+`host_stream` connector must additionally provide `HostStreamer` and
+`HostStreamCases`. An `sdk_owned` polling connector must provide both standard
+runtime scenarios:
+
+```go
+SDKOwnedRuntimeCases: []conformance.SDKOwnedRuntimeCase{
+    {
+        Scenario: conformance.SDKOwnedRuntimeScenarioPollRecovery,
+        Run: runPollErrorThenRecovery,
+    },
+    {
+        Scenario: conformance.SDKOwnedRuntimeScenarioSessionExpired,
+        Run: runExpiredSession,
+        RequireError: true,
+        ErrorContains: "session expired",
+    },
+},
+```
+
+Use `SendCase.Steps` when retries must share one adapter/store/transport. Expected
+failures are part of the contract and use `RequireError` plus `ErrorContains`:
+
+```go
+SendCases: []conformance.SendCase{{
+    Name: "multipart retry",
+    Steps: []conformance.SendStep{
+        {Request: firstAttempt, Expect: conformance.SendExpectation{RequireError: true}},
+        {Request: samePayloadRetry, Expect: conformance.SendExpectation{RequireMessageID: true}},
+        {Request: changedPayload, Expect: conformance.SendExpectation{RequireError: true}},
+    },
+}},
+```
 
 For SDKs developed outside this repository, use a Go workspace or a separate
 test module that requires `beak-channel-sdk-conformance`. Do not add `beak-channel-sdk-conformance` as a
@@ -72,6 +130,13 @@ The first conformance gate focuses on problems that have caused Beak integration
 regressions:
 
 - `ValidateCredential` returns a stable `account_key`.
+- every connector with metadata provides a `Sender` adapter and at least one
+  `SendCase` that calls the real connector. The result must return the configured
+  runtime `platform`, a matching non-empty `account_uuid`, and a platform
+  `message_id` whenever the platform API supplies one.
+- multipart send implementations use `message_uuid` plus account state for
+  retry progress, resume after a middle-part failure without duplicating
+  successful parts, and reject a different payload reusing the same key.
 - webhook connectors declare `capabilities.webhook_registration=manual` when
   an operator must configure the callback, or `automatic` when `Start`
   registers the host-injected endpoint through the platform API.
@@ -112,6 +177,9 @@ regressions:
 - host-owned stream SDKs do not create their own main reconnect loop; SDK-owned
   polling SDKs write `connected`, `reconnecting`, `reconnect_failed`, `stopped`,
   or `expired` through the standard `stream_connection_state` key.
+- multipart progress is persisted through a top-level atomically replaceable
+  value and a minimal state patch, so pruning works with recursively merging
+  account stores and progress saves cannot overwrite concurrent health fields.
 
 ## Suggested Fixture Layout
 

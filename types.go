@@ -52,6 +52,10 @@ type Acknowledger interface {
 	Acknowledge(ctx context.Context, req OutboundAck) (*AckResult, error)
 }
 
+type Sender interface {
+	Send(ctx context.Context, req OutboundMessage) (*SendResult, error)
+}
+
 type HostStreamer interface {
 	ConnectStream(ctx context.Context, req HostStreamConnectRequest) (*StreamConnectResult, error)
 	BuildStreamPing(ctx context.Context, req StreamPingRequest) (*StreamFrame, error)
@@ -205,6 +209,31 @@ type ReferencedMessage struct {
 	Raw               map[string]any `json:"raw,omitempty"`
 }
 
+type OutboundMessage struct {
+	WorkspaceUUID string            `json:"workspace_uuid"`
+	Platform      string            `json:"platform"`
+	AccountUUID   string            `json:"account_uuid"`
+	ChannelUUID   string            `json:"channel_uuid"`
+	SessionUUID   string            `json:"session_uuid"`
+	MessageUUID   string            `json:"message_uuid"`
+	ChatType      string            `json:"chat_type"`
+	ChatID        string            `json:"chat_id"`
+	ThreadID      string            `json:"thread_id,omitempty"`
+	Text          string            `json:"text"`
+	Format        string            `json:"format,omitempty"`
+	Title         string            `json:"title,omitempty"`
+	Mentions      []MentionIdentity `json:"mentions,omitempty"`
+	MentionAll    bool              `json:"mention_all,omitempty"`
+	Raw           map[string]any    `json:"raw,omitempty"`
+}
+
+type SendResult struct {
+	Platform    string         `json:"platform"`
+	AccountUUID string         `json:"account_uuid"`
+	MessageID   string         `json:"message_id,omitempty"`
+	Raw         map[string]any `json:"raw,omitempty"`
+}
+
 type OutboundAck struct {
 	WorkspaceUUID     string         `json:"workspace_uuid"`
 	Platform          string         `json:"platform"`
@@ -326,6 +355,27 @@ type AckCase struct {
 	Expect  AckExpectation `json:"expect"`
 }
 
+type SendCase struct {
+	Name    string          `json:"name,omitempty"`
+	Request OutboundMessage `json:"request"`
+	Expect  SendExpectation `json:"expect"`
+	Steps   []SendStep      `json:"steps,omitempty"`
+}
+
+type SendStep struct {
+	Name    string          `json:"name,omitempty"`
+	Request OutboundMessage `json:"request"`
+	Expect  SendExpectation `json:"expect"`
+}
+
+type SendExpectation struct {
+	MessageID        string   `json:"message_id,omitempty"`
+	RequireMessageID bool     `json:"require_message_id,omitempty"`
+	RequiredRawKeys  []string `json:"required_raw_keys,omitempty"`
+	RequireError     bool     `json:"require_error,omitempty"`
+	ErrorContains    string   `json:"error_contains,omitempty"`
+}
+
 type AckExpectation struct {
 	Status     string `json:"status,omitempty"`
 	Mode       string `json:"mode,omitempty"`
@@ -346,6 +396,20 @@ type RuntimeHealthExpectation struct {
 	RequireReconnectError       bool   `json:"require_reconnect_error,omitempty"`
 	RequireReconnectErrorAt     bool   `json:"require_reconnect_error_at,omitempty"`
 	SessionExpired              *bool  `json:"session_expired,omitempty"`
+}
+
+const (
+	SDKOwnedRuntimeScenarioPollRecovery   = "poll_error_recovery"
+	SDKOwnedRuntimeScenarioSessionExpired = "session_expired"
+)
+
+type SDKOwnedRuntimeCase struct {
+	Name          string                                                      `json:"name,omitempty"`
+	Scenario      string                                                      `json:"scenario"`
+	Run           func(ctx context.Context) (state map[string]any, err error) `json:"-"`
+	Expect        RuntimeHealthExpectation                                    `json:"expect,omitempty"`
+	RequireError  bool                                                        `json:"require_error,omitempty"`
+	ErrorContains string                                                      `json:"error_contains,omitempty"`
 }
 
 type HostStreamConnectRequest struct {
@@ -475,12 +539,15 @@ type Config struct {
 	CredentialValidator      CredentialValidator
 	LoginPoller              LoginPoller
 	InboundParser            InboundParser
+	Sender                   Sender
 	Acknowledger             Acknowledger
 	HostStreamer             HostStreamer
 
-	CredentialCases []CredentialValidationCase
-	LoginPollCases  []LoginPollCase
-	InboundCases    []InboundCase
-	AckCases        []AckCase
-	HostStreamCases []HostStreamCase
+	CredentialCases      []CredentialValidationCase
+	LoginPollCases       []LoginPollCase
+	InboundCases         []InboundCase
+	SendCases            []SendCase
+	AckCases             []AckCase
+	HostStreamCases      []HostStreamCase
+	SDKOwnedRuntimeCases []SDKOwnedRuntimeCase
 }

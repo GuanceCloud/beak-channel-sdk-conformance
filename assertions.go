@@ -375,6 +375,83 @@ func AssertAckResult(t *testing.T, platform string, got *AckResult, err error, e
 	}
 }
 
+func AssertSendResult(t *testing.T, platform string, req OutboundMessage, got *SendResult, err error, expect SendExpectation) {
+	t.Helper()
+	if expect.RequireError {
+		if err == nil {
+			t.Fatal("Send returned nil error, want failure")
+		}
+		if expect.ErrorContains != "" && !strings.Contains(err.Error(), expect.ErrorContains) {
+			t.Fatalf("Send error = %q, want substring %q", err.Error(), expect.ErrorContains)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("Send returned error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("Send returned nil result")
+	}
+	if gotPlatform := strings.TrimSpace(got.Platform); gotPlatform != strings.TrimSpace(platform) {
+		t.Fatalf("send platform = %q, want %q", got.Platform, platform)
+	}
+	if strings.TrimSpace(got.AccountUUID) == "" {
+		t.Fatal("send account_uuid is required")
+	}
+	if req.AccountUUID != "" && got.AccountUUID != req.AccountUUID {
+		t.Fatalf("send account_uuid = %q, want request account_uuid %q", got.AccountUUID, req.AccountUUID)
+	}
+	if expect.RequireMessageID && strings.TrimSpace(got.MessageID) == "" {
+		t.Fatal("send message_id is required by expectation")
+	}
+	if expect.MessageID != "" && got.MessageID != expect.MessageID {
+		t.Fatalf("send message_id = %q, want %q", got.MessageID, expect.MessageID)
+	}
+	for _, key := range expect.RequiredRawKeys {
+		if _, ok := got.Raw[key]; !ok {
+			t.Fatalf("send raw result is missing key %q: %+v", key, got.Raw)
+		}
+	}
+}
+
+func AssertSDKOwnedRuntimeResult(t *testing.T, state map[string]any, err error, tc SDKOwnedRuntimeCase) {
+	t.Helper()
+	requireError := tc.RequireError || tc.Scenario == SDKOwnedRuntimeScenarioSessionExpired
+	if requireError {
+		if err == nil {
+			t.Fatal("SDK-owned runtime scenario returned nil error, want failure")
+		}
+		if tc.ErrorContains != "" && !strings.Contains(err.Error(), tc.ErrorContains) {
+			t.Fatalf("SDK-owned runtime error = %q, want substring %q", err.Error(), tc.ErrorContains)
+		}
+	} else if err != nil {
+		t.Fatalf("SDK-owned runtime scenario returned error: %v", err)
+	}
+	expect := tc.Expect
+	switch tc.Scenario {
+	case SDKOwnedRuntimeScenarioPollRecovery:
+		expect.ConnectionState = RuntimeHealthStateConnected
+		expect.RequireConnectedAt = true
+		expect.RequireLastActivityAt = true
+		expect.RequireLastEventAt = true
+		expect.RequireLastError = true
+		expect.RequireLastErrorAt = true
+		if expect.SessionExpired == nil {
+			value := false
+			expect.SessionExpired = &value
+		}
+	case SDKOwnedRuntimeScenarioSessionExpired:
+		expect.ConnectionState = RuntimeHealthStateExpired
+		expect.RequireLastError = true
+		expect.RequireLastErrorAt = true
+		if expect.SessionExpired == nil {
+			value := true
+			expect.SessionExpired = &value
+		}
+	}
+	AssertRuntimeHealthState(t, state, expect)
+}
+
 func AssertStreamConnectResult(t *testing.T, got *StreamConnectResult, err error, expect HostStreamConnectExpectation) {
 	t.Helper()
 	if err != nil {
