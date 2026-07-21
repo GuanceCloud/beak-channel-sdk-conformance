@@ -20,6 +20,7 @@ func (fakeConnector) Metadata() ConnectorMetadata {
 			GroupChat:           true,
 			Webhook:             true,
 			WebhookRegistration: WebhookRegistrationManual,
+			AckModes:            []string{"reaction"},
 		},
 	}
 }
@@ -256,12 +257,12 @@ func (sdkOwnedConnector) Metadata() ConnectorMetadata {
 }
 
 func TestValidateConfigRequiresCommonContracts(t *testing.T) {
-	validSendCases := []SendCase{{Request: OutboundMessage{Text: "hello"}}}
 	if _, err := validateConfig(Config{Platform: "fake"}); err == nil || !strings.Contains(err.Error(), "MetadataProvider") {
 		t.Fatalf("missing metadata error=%v", err)
 	}
 	connector := sdkOwnedConnector{}
-	if _, err := validateConfig(Config{Platform: "fake", MetadataProvider: connector, Sender: connector, SendCases: validSendCases}); err == nil || !strings.Contains(err.Error(), SDKOwnedRuntimeScenarioPollRecovery) {
+	cfg := validFakeConfig(connector)
+	if _, err := validateConfig(cfg); err == nil || !strings.Contains(err.Error(), SDKOwnedRuntimeScenarioPollRecovery) {
 		t.Fatalf("missing sdk-owned runtime error=%v", err)
 	}
 	cases := []SDKOwnedRuntimeCase{{
@@ -271,8 +272,73 @@ func TestValidateConfigRequiresCommonContracts(t *testing.T) {
 		Scenario: SDKOwnedRuntimeScenarioSessionExpired,
 		Run:      func(context.Context) (map[string]any, error) { return map[string]any{}, errors.New("expired") },
 	}}
-	if _, err := validateConfig(Config{Platform: "fake", MetadataProvider: connector, Sender: connector, SendCases: validSendCases, SDKOwnedRuntimeCases: cases}); err != nil {
+	cfg.SDKOwnedRuntimeCases = cases
+	if _, err := validateConfig(cfg); err != nil {
 		t.Fatalf("valid sdk-owned config error=%v", err)
+	}
+}
+
+func TestValidateConfigRequiresCapabilityDrivenAdaptersAndCases(t *testing.T) {
+	connector := fakeConnector{}
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+		want   string
+	}{
+		{name: "credential schema adapter", mutate: func(cfg *Config) { cfg.CredentialSchemaProvider = nil }, want: "CredentialSchemaProvider"},
+		{name: "credential validator adapter", mutate: func(cfg *Config) { cfg.CredentialValidator = nil }, want: "CredentialValidator"},
+		{name: "valid credential case", mutate: func(cfg *Config) {
+			cfg.CredentialCases = []CredentialValidationCase{{Expect: CredentialValidationExpectation{Valid: false}}}
+		}, want: "valid CredentialCase"},
+		{name: "login poller adapter", mutate: func(cfg *Config) { cfg.LoginPoller = nil }, want: "LoginPoller"},
+		{name: "approved login poll case", mutate: func(cfg *Config) {
+			cfg.LoginPollCases = []LoginPollCase{{Expect: LoginPollExpectation{Approved: false}}}
+		}, want: "approved LoginPollCase"},
+		{name: "inbound parser adapter", mutate: func(cfg *Config) { cfg.InboundParser = nil }, want: "InboundParser"},
+		{name: "delivered inbound case", mutate: func(cfg *Config) {
+			cfg.InboundCases = []InboundCase{{Expect: InboundExpectation{ExpectNoMessages: true}}}
+		}, want: "returns a message"},
+		{name: "acknowledger adapter", mutate: func(cfg *Config) { cfg.Acknowledger = nil }, want: "Acknowledger"},
+		{name: "ack cases", mutate: func(cfg *Config) { cfg.AckCases = nil }, want: "AckCases"},
+		{name: "successful send case", mutate: func(cfg *Config) { cfg.SendCases = []SendCase{{Expect: SendExpectation{RequireError: true}}} }, want: "successful SendCase"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validFakeConfig(connector)
+			tc.mutate(&cfg)
+			if _, err := validateConfig(cfg); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error=%v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func validFakeConfig(connector MetadataProvider) Config {
+	fake := fakeConnector{}
+	return Config{
+		Platform:                 "fake",
+		MetadataProvider:         connector,
+		CredentialSchemaProvider: fake,
+		CredentialValidator:      fake,
+		LoginPoller:              fake,
+		InboundParser:            fake,
+		Sender:                   fake,
+		Acknowledger:             fake,
+		CredentialCases: []CredentialValidationCase{{
+			Expect: CredentialValidationExpectation{Valid: true},
+		}},
+		LoginPollCases: []LoginPollCase{{
+			Expect: LoginPollExpectation{Approved: true},
+		}},
+		InboundCases: []InboundCase{{
+			Expect: InboundExpectation{},
+		}},
+		SendCases: []SendCase{{
+			Expect: SendExpectation{},
+		}},
+		AckCases: []AckCase{{
+			Expect: AckExpectation{Status: "sent"},
+		}},
 	}
 }
 
@@ -291,6 +357,14 @@ func (splitPlatformConnector) Metadata() ConnectorMetadata {
 			WebhookRegistration: WebhookRegistrationManual,
 		},
 	}
+}
+
+func (splitPlatformConnector) CredentialSchema(context.Context) CredentialSchema {
+	return CredentialSchema{Type: "object", LoginModes: []string{LoginModeCredential}, Properties: map[string]CredentialField{"token": {Type: "string", Secret: true}}, Required: []string{"token"}}
+}
+
+func (splitPlatformConnector) ValidateCredential(context.Context, CredentialValidationRequest) (*CredentialValidationResult, error) {
+	return &CredentialValidationResult{Valid: true, AccountKey: "account-1", Credential: map[string]any{"account_id": "account-1"}}, nil
 }
 
 func (splitPlatformConnector) ParseInbound(context.Context, InboundFixture) ([]InboundMessage, error) {
@@ -319,12 +393,17 @@ func (splitPlatformConnector) Send(_ context.Context, req OutboundMessage) (*Sen
 func TestRunSupportsMetadataPlatformSeparateFromRuntimePlatform(t *testing.T) {
 	connector := splitPlatformConnector{}
 	Run(t, Config{
-		Platform:         "runtime-platform",
-		MetadataPlatform: "sdk-platform",
-		MetadataProvider: connector,
-		InboundParser:    connector,
-		Sender:           connector,
-		Acknowledger:     connector,
+		Platform:                 "runtime-platform",
+		MetadataPlatform:         "sdk-platform",
+		MetadataProvider:         connector,
+		CredentialSchemaProvider: connector,
+		CredentialValidator:      connector,
+		InboundParser:            connector,
+		Sender:                   connector,
+		Acknowledger:             connector,
+		CredentialCases: []CredentialValidationCase{{
+			Expect: CredentialValidationExpectation{Valid: true, AccountKey: "account-1"},
+		}},
 		InboundCases: []InboundCase{{
 			Name:    "runtime inbound platform",
 			Fixture: InboundFixture{},

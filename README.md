@@ -27,6 +27,7 @@ func TestBeakSDKConformance(t *testing.T) {
         CredentialValidator:      adapter,
         LoginPoller:              adapter,
         InboundParser:            adapter,
+        Acknowledger:             adapter,
         Sender:                   adapter,
         CredentialCases: conformance.MustLoadJSON[[]conformance.CredentialValidationCase](
             t,
@@ -40,6 +41,15 @@ func TestBeakSDKConformance(t *testing.T) {
             t,
             "testdata/beak-conformance/inbound_cases.json",
         ),
+        AckCases: []conformance.AckCase{{
+            Name: "processing acknowledgement",
+            Request: conformance.OutboundAck{
+                AccountUUID: "account-1",
+                ChatType: "group",
+                ChatID: "chat-1",
+                Action: "start",
+            },
+        }},
         SendCases: []conformance.SendCase{{
             Name: "text outbound",
             Request: conformance.OutboundMessage{
@@ -66,10 +76,30 @@ conformance.Run(t, conformance.Config{
     Platform:         "feishu",
     MetadataPlatform: "lark",
     MetadataProvider: adapter,
+    CredentialSchemaProvider: adapter,
+    CredentialValidator: adapter,
     InboundParser:    adapter,
     Acknowledger:     adapter,
     Sender:           adapter,
     HostStreamer:     adapter,
+    CredentialCases: []conformance.CredentialValidationCase{{
+        Request: validFeishuCredential,
+        Expect: conformance.CredentialValidationExpectation{Valid: true},
+    }},
+    InboundCases: []conformance.InboundCase{{
+        Fixture: feishuMessageFixture,
+        Expect: conformance.InboundExpectation{Text: "hello"},
+    }},
+    AckCases: []conformance.AckCase{{
+        Request: processingAck,
+        Expect: conformance.AckExpectation{Status: "sent"},
+    }},
+    HostStreamCases: []conformance.HostStreamCase{{
+        Request: feishuStreamConnectRequest,
+        Expect: conformance.HostStreamConnectExpectation{
+            URLContains: "wss://",
+        },
+    }},
     SendCases: []conformance.SendCase{{
         Request: conformance.OutboundMessage{
             AccountUUID: "account-feishu",
@@ -86,10 +116,19 @@ conformance.Run(t, conformance.Config{
 The adapter should only convert types. It must not add business logic that the
 real SDK connector does not have.
 
-`MetadataProvider`, `Sender`, and at least one `SendCase` are mandatory. A
-`host_stream` connector must additionally provide `HostStreamer` and
-`HostStreamCases`. An `sdk_owned` polling connector must provide both standard
-runtime scenarios:
+The helper rejects incomplete adapters before running fixtures:
+
+- Every connector must provide `MetadataProvider`, `CredentialSchemaProvider`,
+  `InboundParser`, `Sender`, at least one inbound case expected to return a
+  message, and at least one successful send case.
+- A connector declaring `credential` login must provide `CredentialValidator`
+  and at least one valid credential case. A connector declaring `qr_code`
+  login must provide `LoginPoller` and at least one approved login case.
+- A connector declaring non-empty `AckModes` must provide `Acknowledger` and
+  at least one acknowledgement case.
+- A `host_stream` connector must additionally provide `HostStreamer` and
+  `HostStreamCases`. An `sdk_owned` polling connector must provide both standard
+  runtime scenarios:
 
 ```go
 SDKOwnedRuntimeCases: []conformance.SDKOwnedRuntimeCase{
@@ -180,6 +219,9 @@ regressions:
 - multipart progress is persisted through a top-level atomically replaceable
   value and a minimal state patch, so pruning works with recursively merging
   account stores and progress saves cannot overwrite concurrent health fields.
+- a successful platform send does not perform an unchanged full-state save;
+  only actual token, context, or multipart-progress changes produce a minimal
+  state patch.
 
 ## Suggested Fixture Layout
 

@@ -199,6 +199,42 @@ func validateConfig(cfg Config) (ConnectorMetadata, error) {
 	if len(cfg.SendCases) == 0 {
 		return ConnectorMetadata{}, fmt.Errorf("connectors must define SendCases")
 	}
+	if !hasSuccessfulSendCase(cfg.SendCases) {
+		return ConnectorMetadata{}, fmt.Errorf("connectors must define at least one successful SendCase")
+	}
+	if cfg.CredentialSchemaProvider == nil {
+		return ConnectorMetadata{}, fmt.Errorf("connectors must expose a CredentialSchemaProvider adapter")
+	}
+	if containsString(metadata.Capabilities.LoginModes, LoginModeCredential) {
+		if cfg.CredentialValidator == nil {
+			return ConnectorMetadata{}, fmt.Errorf("credential login connectors must expose a CredentialValidator adapter")
+		}
+		if !hasValidCredentialCase(cfg.CredentialCases) {
+			return ConnectorMetadata{}, fmt.Errorf("credential login connectors must define at least one valid CredentialCase")
+		}
+	}
+	if containsString(metadata.Capabilities.LoginModes, LoginModeQRCode) {
+		if cfg.LoginPoller == nil {
+			return ConnectorMetadata{}, fmt.Errorf("qr_code login connectors must expose a LoginPoller adapter")
+		}
+		if !hasApprovedLoginPollCase(cfg.LoginPollCases) {
+			return ConnectorMetadata{}, fmt.Errorf("qr_code login connectors must define at least one approved LoginPollCase")
+		}
+	}
+	if cfg.InboundParser == nil {
+		return ConnectorMetadata{}, fmt.Errorf("connectors must expose an InboundParser adapter")
+	}
+	if !hasDeliveredInboundCase(cfg.InboundCases) {
+		return ConnectorMetadata{}, fmt.Errorf("connectors must define at least one InboundCase that returns a message")
+	}
+	if len(metadata.Capabilities.AckModes) > 0 {
+		if cfg.Acknowledger == nil {
+			return ConnectorMetadata{}, fmt.Errorf("connectors with ack_modes must expose an Acknowledger adapter")
+		}
+		if len(cfg.AckCases) == 0 {
+			return ConnectorMetadata{}, fmt.Errorf("connectors with ack_modes must define AckCases")
+		}
+	}
 	switch metadata.Capabilities.RuntimeOwnership {
 	case RuntimeOwnershipHostStream:
 		if cfg.HostStreamer == nil {
@@ -229,6 +265,50 @@ func validateConfig(cfg Config) (ConnectorMetadata, error) {
 		}
 	}
 	return metadata, nil
+}
+
+func hasSuccessfulSendCase(cases []SendCase) bool {
+	for _, tc := range cases {
+		if len(tc.Steps) == 0 {
+			if !tc.Expect.RequireError {
+				return true
+			}
+			continue
+		}
+		for _, step := range tc.Steps {
+			if !step.Expect.RequireError {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasValidCredentialCase(cases []CredentialValidationCase) bool {
+	for _, tc := range cases {
+		if tc.Expect.Valid && !tc.Expect.RequireGoError {
+			return true
+		}
+	}
+	return false
+}
+
+func hasApprovedLoginPollCase(cases []LoginPollCase) bool {
+	for _, tc := range cases {
+		if tc.Expect.Approved {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDeliveredInboundCase(cases []InboundCase) bool {
+	for _, tc := range cases {
+		if !tc.Expect.ExpectNoMessages {
+			return true
+		}
+	}
+	return false
 }
 
 func caseName(name, fallback string) string {
