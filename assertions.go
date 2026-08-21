@@ -299,6 +299,36 @@ func AssertInboundMessages(t *testing.T, platform string, got []InboundMessage, 
 	if expect.RequireDedupeKey && strings.TrimSpace(msg.DedupeKey) == "" {
 		t.Fatal("inbound dedupe_key is required by expectation")
 	}
+	if len(msg.Attachments) < expect.MinAttachments {
+		t.Fatalf("inbound attachments = %d, want at least %d", len(msg.Attachments), expect.MinAttachments)
+	}
+	for index, attachmentExpect := range expect.Attachments {
+		if index >= len(msg.Attachments) {
+			t.Fatalf("inbound attachment %d is missing", index)
+		}
+		attachment := msg.Attachments[index]
+		if attachmentExpect.Kind != "" && attachment.Kind != attachmentExpect.Kind {
+			t.Fatalf("inbound attachment[%d].kind = %q, want %q", index, attachment.Kind, attachmentExpect.Kind)
+		}
+		if attachmentExpect.Source != "" && attachment.Source != attachmentExpect.Source {
+			t.Fatalf("inbound attachment[%d].source = %q, want %q", index, attachment.Source, attachmentExpect.Source)
+		}
+		if attachmentExpect.ContentTypePrefix != "" && !strings.HasPrefix(strings.ToLower(attachment.ContentType), strings.ToLower(attachmentExpect.ContentTypePrefix)) {
+			t.Fatalf("inbound attachment[%d].content_type = %q, want prefix %q", index, attachment.ContentType, attachmentExpect.ContentTypePrefix)
+		}
+		if attachmentExpect.FileName != "" && attachment.FileName != attachmentExpect.FileName {
+			t.Fatalf("inbound attachment[%d].file_name = %q, want %q", index, attachment.FileName, attachmentExpect.FileName)
+		}
+		if attachmentExpect.RequirePath && strings.TrimSpace(attachment.Path) == "" {
+			t.Fatalf("inbound attachment[%d].path is required", index)
+		}
+		if attachmentExpect.RequireURL && strings.TrimSpace(attachment.URL) == "" {
+			t.Fatalf("inbound attachment[%d].url is required", index)
+		}
+		if attachmentExpect.RequireResourceID && strings.TrimSpace(attachment.PlatformResourceID) == "" {
+			t.Fatalf("inbound attachment[%d].platform_resource_id is required", index)
+		}
+	}
 	if msg.MentionAll && msg.MentionedMe && len(msg.Mentions) == 0 {
 		t.Fatal("mention_all must not be the only signal used to set mentioned_me")
 	}
@@ -410,6 +440,17 @@ func AssertSendResult(t *testing.T, platform string, req OutboundMessage, got *S
 	for _, key := range expect.RequiredRawKeys {
 		if _, ok := got.Raw[key]; !ok {
 			t.Fatalf("send raw result is missing key %q: %+v", key, got.Raw)
+		}
+	}
+	if len(got.AttachmentResults) < expect.MinAttachmentResults {
+		t.Fatalf("send attachment results = %d, want at least %d", len(got.AttachmentResults), expect.MinAttachmentResults)
+	}
+	for index, status := range expect.AttachmentStatuses {
+		if index >= len(got.AttachmentResults) {
+			t.Fatalf("send attachment result %d is missing", index)
+		}
+		if got.AttachmentResults[index].Status != status {
+			t.Fatalf("send attachment result[%d].status = %q, want %q", index, got.AttachmentResults[index].Status, status)
 		}
 	}
 }
